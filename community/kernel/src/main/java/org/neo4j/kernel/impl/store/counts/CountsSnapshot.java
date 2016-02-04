@@ -43,4 +43,45 @@ public class CountsSnapshot
     {
         return txId;
     }
+
+    @Override
+    public boolean equals( Object obj )
+    {
+        if ( obj == this )
+        {
+            return true;
+        }
+
+        if ( obj == null || !(obj instanceof CountsSnapshot) )
+        {
+            return false;
+        }
+
+        CountsSnapshot other = (CountsSnapshot) obj;
+        return other.getMap().equals( this.getMap() ) && (Long.compare( other.getTxId(), this.getTxId() ) == 0);
+    }
+
+    @Override
+    public int hashCode()
+    {
+        int hashcode = (int) this.getTxId();
+        for ( CountsKey key : map.keySet() )
+        {
+            hashcode += (int) key.recordType().code;
+            for ( long val : map.get( key ) )
+            {
+                hashcode += val;
+            }
+        }
+        return hashcode;
+    }
+
+    @Override
+    public String toString()
+    {
+        return "CountsSnapshot{" +
+                "map=" + map +
+                ", txId=" + txId +
+                '}';
+    }
 }

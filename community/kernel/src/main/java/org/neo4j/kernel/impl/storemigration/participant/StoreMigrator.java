@@ -72,6 +72,7 @@ import org.neo4j.kernel.impl.storemigration.monitoring.MigrationProgressMonitor;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.PhysicalLogFiles;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
+import org.neo4j.kernel.internal.DatabaseHealth;
 import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.unsafe.impl.batchimport.AdditionalInitialIds;
@@ -125,8 +126,8 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     private final PageCache pageCache;
     private final SchemaIndexProvider schemaIndexProvider;
 
-    public StoreMigrator( FileSystemAbstraction fileSystem, PageCache pageCache, Config config,
-            LogService logService, SchemaIndexProvider schemaIndexProvider )
+    public StoreMigrator( FileSystemAbstraction fileSystem, PageCache pageCache, Config config, LogService logService,
+            SchemaIndexProvider schemaIndexProvider )
     {
         super( "Store files" );
         this.fileSystem = fileSystem;

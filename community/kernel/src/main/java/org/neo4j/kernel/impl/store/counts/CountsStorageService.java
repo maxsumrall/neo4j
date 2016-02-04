@@ -21,6 +21,7 @@ package org.neo4j.kernel.impl.store.counts;
 
 import org.neo4j.kernel.impl.api.CountsAccessor;
 import org.neo4j.kernel.impl.api.CountsVisitor;
+import org.neo4j.kernel.internal.DatabaseHealth;
 import org.neo4j.register.Register;
 
 interface CountsStorageService extends CountsAccessor, CountsVisitor.Visitable
@@ -48,5 +49,5 @@ interface CountsStorageService extends CountsAccessor, CountsVisitor.Visitable
     @Override
     void accept( CountsVisitor visitor );
 
-    void initialize( CountsSnapshot snapshot );
+    void initialize( CountsSnapshot snapshot, DatabaseHealth databaseHealth );
 }

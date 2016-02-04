@@ -32,6 +32,7 @@ import org.neo4j.kernel.impl.storemigration.legacystore.LegacyStoreVersionCheck;
 import org.neo4j.kernel.impl.storemigration.monitoring.MigrationProgressMonitor;
 import org.neo4j.kernel.impl.storemigration.participant.LegacyIndexMigrator;
 import org.neo4j.kernel.impl.storemigration.participant.StoreMigrator;
+import org.neo4j.kernel.internal.DatabaseHealth;
 import org.neo4j.kernel.spi.legacyindex.IndexImplementation;
 import org.neo4j.logging.LogProvider;
 
@@ -52,12 +53,13 @@ public class DatabaseMigrator
     private final LabelScanStoreProvider labelScanStoreProvider;
     private final Map<String,IndexImplementation> indexProviders;
     private final PageCache pageCache;
+    private DatabaseHealth databaseHealth;
 
     public DatabaseMigrator(
             MigrationProgressMonitor progressMonitor, FileSystemAbstraction fs,
             Config config, LogService logService, SchemaIndexProvider schemaIndexProvider,
             LabelScanStoreProvider labelScanStoreProvider,
-            Map<String,IndexImplementation> indexProviders, PageCache pageCache )
+            Map<String,IndexImplementation> indexProviders, PageCache pageCache, DatabaseHealth databaseHealth )
     {
         this.progressMonitor = progressMonitor;
         this.fs = fs;
@@ -67,6 +69,7 @@ public class DatabaseMigrator
         this.labelScanStoreProvider = labelScanStoreProvider;
         this.indexProviders = indexProviders;
         this.pageCache = pageCache;
+        this.databaseHealth = databaseHealth;
     }
 
     /**

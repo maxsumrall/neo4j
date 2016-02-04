@@ -543,7 +543,8 @@ public class NeoStoreDataSource implements Lifecycle, IndexProviders
                 schemaIndexProvider,
                 labelScanStoreProvider,
                 indexProviders,
-                pageCache ).migrate( storeDir );
+                pageCache,
+                databaseHealth ).migrate( storeDir );
     }
 
     private StorageEngine buildStorageEngine(
@@ -716,9 +717,8 @@ public class NeoStoreDataSource implements Lifecycle, IndexProviders
 
         final LatestCheckPointFinder checkPointFinder =
                 new LatestCheckPointFinder( logFiles, fileSystemAbstraction, logEntryReader );
-        Recovery.SPI spi = new DefaultRecoverySPI(
-                storageEngine, logFileRecoverer, logFiles, fileSystemAbstraction, logVersionRepository,
-                checkPointFinder );
+        Recovery.SPI spi = new DefaultRecoverySPI( storageEngine, logFileRecoverer, logFiles, fileSystemAbstraction,
+                logVersionRepository, checkPointFinder );
         Recovery recovery = new Recovery( spi, recoveryMonitor );
 
         life.add( recovery );
