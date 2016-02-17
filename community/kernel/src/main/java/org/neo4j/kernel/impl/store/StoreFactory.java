@@ -60,6 +60,7 @@ public class StoreFactory
     public static final String SCHEMA_STORE_NAME = ".schemastore.db";
     public static final String RELATIONSHIP_GROUP_STORE_NAME = ".relationshipgroupstore.db";
     public static final String COUNTS_STORE = ".counts.db";
+    public static final String NEW_COUNTS_STORE = ".new.counts.db";
 
     private Config config;
     private IdGeneratorFactory idGeneratorFactory;

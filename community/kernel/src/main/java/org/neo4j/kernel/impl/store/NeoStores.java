@@ -544,6 +544,13 @@ public class NeoStores implements AutoCloseable
                 recordFormats.relationshipGroup(), recordFormats.storeVersion() ) );
     }
 
+    CommonAbstractStore createNewCountsStore( String storeName)
+    {
+        File storeFile = getStoreFile( storeName );
+        return initialize( new NewCountsStore( storeFile, config, IdType.STATISTICS, idGeneratorFactory, pageCache,
+                logProvider, recordFormats.newCountsStore(), recordFormats.storeVersion() ) );
+    }
+
     CountsTracker createCountStore( String storeName )
     {
         File storeFile = getStoreFile( storeName );

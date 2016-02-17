@@ -35,7 +35,8 @@ public enum IdType
     NEOSTORE_BLOCK( false ),
     SCHEMA( 35, false ),
     NODE_LABELS( 35, true ),
-    RELATIONSHIP_GROUP( 35, false );
+    RELATIONSHIP_GROUP( 35, false ),
+    STATISTICS( false );
 
     private final long max;
     private final boolean allowAggressiveReuse;

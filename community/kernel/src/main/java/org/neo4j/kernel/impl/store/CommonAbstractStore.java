@@ -22,6 +22,7 @@ package org.neo4j.kernel.impl.store;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -33,11 +34,11 @@ import org.neo4j.helpers.collection.Visitor;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
-import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
-import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.store.id.IdGenerator;
+import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdGeneratorImpl;
+import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.Record;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
@@ -222,8 +223,7 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord>
         try
         {
             extractHeaderRecord();
-            int filePageSize = pageCache.pageSize() - pageCache.pageSize() % getRecordSize();
-            storeFile = pageCache.map( getStorageFileName(), filePageSize );
+            storeFile = createPagedFile();
         }
         catch ( IOException e )
         {
@@ -231,6 +231,12 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord>
             throw new UnderlyingStorageException( e );
         }
         loadIdGenerator();
+    }
+
+    protected PagedFile createPagedFile( OpenOption... openOptions ) throws IOException
+    {
+        int filePageSize = pageCache.pageSize() - pageCache.pageSize() % getRecordSize();
+        return pageCache.map( getStorageFileName(), filePageSize, openOptions );
     }
 
     private void extractHeaderRecord() throws IOException

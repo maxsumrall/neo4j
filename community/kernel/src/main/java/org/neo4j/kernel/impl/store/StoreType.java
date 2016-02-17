@@ -166,6 +166,14 @@ public enum StoreType
                     }
                 }
             },
+    NEW_COUNTS( StoreFactory.NEW_COUNTS_STORE, false )
+            {
+                @Override
+                public CommonAbstractStore open( NeoStores neoStores )
+                {
+                    return neoStores.createNewCountsStore( getStoreName() );
+                }
+            },
     META_DATA( MetaDataStore.DEFAULT_NAME ) // Make sure this META store is last
             {
                 @Override

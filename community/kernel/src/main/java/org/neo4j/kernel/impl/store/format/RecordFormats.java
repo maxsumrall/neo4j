@@ -19,8 +19,10 @@
  */
 package org.neo4j.kernel.impl.store.format;
 
+import org.neo4j.kernel.impl.store.NewCountsStore;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
+import org.neo4j.kernel.impl.store.record.NewCountsStoreRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.PropertyKeyTokenRecord;
 import org.neo4j.kernel.impl.store.record.PropertyRecord;
@@ -47,4 +49,6 @@ public interface RecordFormats
     RecordFormat<RelationshipTypeTokenRecord> relationshipTypeToken();
 
     RecordFormat<RelationshipGroupRecord> relationshipGroup();
+
+    RecordFormat<NewCountsStoreRecord> newCountsStore();
 }

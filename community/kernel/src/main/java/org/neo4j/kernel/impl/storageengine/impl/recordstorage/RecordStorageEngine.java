@@ -439,6 +439,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     {
         indexingService.forceAll();
         labelScanStore.force();
+
         for ( IndexImplementation index : legacyIndexProviderLookup.all() )
         {
             index.force();

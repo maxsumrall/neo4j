@@ -149,11 +149,25 @@ public enum StoreFile
                     return true;
                 }
             },
+
     COUNTS_STORE_RIGHT(
             CountsTracker.TYPE_DESCRIPTOR,
             StoreFactory.COUNTS_STORE + CountsTracker.RIGHT,
             Legacy22Store.LEGACY_VERSION,
             false
+    )
+            {
+                @Override
+                boolean isOptional()
+                {
+                    return true;
+                }
+            },
+
+    NEW_COUNTS_STORE(
+            "NewCountsStore",
+            StoreFactory.NEW_COUNTS_STORE,
+            LowLimit.STORE_VERSION //TODO This should move to a common place e.g. store factory.
     )
             {
                 @Override

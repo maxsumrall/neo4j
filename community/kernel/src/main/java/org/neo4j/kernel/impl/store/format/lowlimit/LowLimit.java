@@ -23,6 +23,7 @@ import org.neo4j.kernel.impl.store.format.RecordFormat;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
+import org.neo4j.kernel.impl.store.record.NewCountsStoreRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.PropertyKeyTokenRecord;
 import org.neo4j.kernel.impl.store.record.PropertyRecord;
@@ -44,6 +45,7 @@ public class LowLimit implements RecordFormats
     private final RecordFormat<RelationshipTypeTokenRecord> relationshipTypeToken =
             new RelationshipTypeTokenRecordFormat();
     private final RecordFormat<RelationshipGroupRecord> relationshipGroup = new RelationshipGroupRecordFormat();
+    private final RecordFormat<NewCountsStoreRecord> newCountsStore = new NewCountsStoreRecordFormat();
 
     @Override
     public String storeVersion()
@@ -97,6 +99,12 @@ public class LowLimit implements RecordFormats
     public RecordFormat<RelationshipGroupRecord> relationshipGroup()
     {
         return relationshipGroup;
+    }
+
+    @Override
+    public RecordFormat<NewCountsStoreRecord> newCountsStore()
+    {
+        return newCountsStore;
     }
 
     @Override
