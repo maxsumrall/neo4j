@@ -112,6 +112,7 @@ import org.neo4j.kernel.impl.store.RelationshipTypeTokenStore;
 import org.neo4j.kernel.impl.store.SchemaStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
 import org.neo4j.kernel.impl.store.UnderlyingStorageException;
+import org.neo4j.kernel.impl.store.counts.CountsStorageServiceImpl;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
 import org.neo4j.kernel.impl.store.format.lowlimit.LowLimit;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
@@ -292,6 +293,9 @@ public class BatchInserterImpl implements BatchInserter
         schemaStore = neoStores.getSchemaStore();
         labelTokenStore = neoStores.getLabelTokenStore();
 
+
+
+
         List<Token> indexes = propertyKeyTokenStore.getTokens( 10000 );
         propertyKeyTokens = new BatchTokenHolder( indexes );
         labelTokens = new BatchTokenHolder( labelTokenStore.getTokens( Integer.MAX_VALUE ) );
@@ -299,7 +303,7 @@ public class BatchInserterImpl implements BatchInserter
         relationshipTypeTokens = new BatchTokenHolder( types );
         indexStore = life.add( new IndexConfigStore( this.storeDir, fileSystem ) );
         schemaCache = new SchemaCache( new StandardConstraintSemantics(), schemaStore );
-        indexStoreView = new NeoStoreIndexStoreView( LockService.NO_LOCK_SERVICE, neoStores );
+        indexStoreView = new NeoStoreIndexStoreView( LockService.NO_LOCK_SERVICE, neoStores, new CountsStorageServiceImpl() );
 
         Dependencies deps = new Dependencies();
         deps.satisfyDependencies( fileSystem, config, logService, indexStoreView );

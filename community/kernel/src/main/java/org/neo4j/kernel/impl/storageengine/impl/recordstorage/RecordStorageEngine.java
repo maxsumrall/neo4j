@@ -210,7 +210,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
             schemaStorage = new SchemaStorage( neoStores.getSchemaStore() );
 
             schemaIndexProviderMap = new DefaultSchemaIndexProviderMap( indexProvider );
-            indexStoreView = new NeoStoreIndexStoreView( lockService, neoStores );
+            indexStoreView = new NeoStoreIndexStoreView( lockService, neoStores, countsStorageService );
             indexingService = IndexingServiceFactory.createIndexingService( config, scheduler, schemaIndexProviderMap,
                     indexStoreView, tokenNameLookup,
                     toList( new SchemaStorage( neoStores.getSchemaStore() ).allIndexRules() ), logProvider,

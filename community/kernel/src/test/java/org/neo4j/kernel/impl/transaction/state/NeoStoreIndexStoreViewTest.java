@@ -163,7 +163,9 @@ public class NeoStoreIndexStoreViewTest
         createAlistairAndStefanNodes();
         getOrCreateIds();
 
-        neoStores = graphDb.getDependencyResolver().resolveDependency( RecordStorageEngine.class ).testAccessNeoStores();
+        RecordStorageEngine recordStorageEngine = graphDb.getDependencyResolver().resolveDependency(
+                RecordStorageEngine.class );
+        neoStores = recordStorageEngine.testAccessNeoStores();
         counts = neoStores.getCounts();
         locks = mock( LockService.class, new Answer()
         {
@@ -179,7 +181,7 @@ public class NeoStoreIndexStoreViewTest
                 return lock;
             }
         } );
-        storeView = new NeoStoreIndexStoreView( locks, neoStores );
+        storeView = new NeoStoreIndexStoreView( locks, neoStores, recordStorageEngine.getCountsStorageService() );
     }
 
     private void createAlistairAndStefanNodes()

@@ -33,6 +33,8 @@ import org.neo4j.kernel.api.index.NodePropertyUpdate;
 import org.neo4j.kernel.api.labelscan.NodeLabelUpdate;
 import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.api.CountsAccessor;
+import org.neo4j.kernel.impl.api.DualCountsAccessor;
+import org.neo4j.kernel.impl.api.DualIndexStatsUpdater;
 import org.neo4j.kernel.impl.api.index.IndexStoreView;
 import org.neo4j.kernel.impl.api.index.StoreScan;
 import org.neo4j.kernel.impl.locking.Lock;
@@ -41,6 +43,7 @@ import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.PropertyStore;
 import org.neo4j.kernel.impl.store.StoreIdIterator;
+import org.neo4j.kernel.impl.store.counts.CountsStorageService;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
@@ -62,19 +65,23 @@ public class NeoStoreIndexStoreView implements IndexStoreView
     private final NodeStore nodeStore;
     private final LockService locks;
     private final CountsTracker counts;
+    private final CountsStorageService countsStorageService;
+    private final DualCountsAccessor dualCountsAccessor;
 
-    public NeoStoreIndexStoreView( LockService locks, NeoStores neoStores )
+    public NeoStoreIndexStoreView( LockService locks, NeoStores neoStores, CountsStorageService countsStorageService )
     {
         this.locks = locks;
         this.propertyStore = neoStores.getPropertyStore();
         this.nodeStore = neoStores.getNodeStore();
         this.counts = neoStores.getCounts();
+        this.countsStorageService = countsStorageService;
+        this.dualCountsAccessor = new DualCountsAccessor( counts, countsStorageService );
     }
 
     @Override
     public DoubleLongRegister indexUpdatesAndSize( IndexDescriptor descriptor, DoubleLongRegister output )
     {
-        return counts.indexUpdatesAndSize( descriptor.getLabelId(), descriptor.getPropertyKeyId(), output );
+        return dualCountsAccessor.indexUpdatesAndSize( descriptor.getLabelId(), descriptor.getPropertyKeyId(), output );
     }
 
     @Override
@@ -83,7 +90,7 @@ public class NeoStoreIndexStoreView implements IndexStoreView
     {
         int labelId = descriptor.getLabelId();
         int propertyKeyId = descriptor.getPropertyKeyId();
-        try ( CountsAccessor.IndexStatsUpdater updater = counts.updateIndexCounts() )
+        try ( CountsAccessor.IndexStatsUpdater updater = new DualIndexStatsUpdater(counts, countsStorageService) )
         {
             updater.replaceIndexSample( labelId, propertyKeyId, uniqueElements, maxUniqueElements );
             updater.replaceIndexUpdateAndSize( labelId, propertyKeyId, 0l, indexSize );
@@ -93,7 +100,7 @@ public class NeoStoreIndexStoreView implements IndexStoreView
     @Override
     public void incrementIndexUpdates( IndexDescriptor descriptor, long updatesDelta )
     {
-        try ( CountsAccessor.IndexStatsUpdater updater = counts.updateIndexCounts() )
+        try ( CountsAccessor.IndexStatsUpdater updater = new DualIndexStatsUpdater( counts, countsStorageService ) )
         {
             updater.incrementIndexUpdates( descriptor.getLabelId(), descriptor.getPropertyKeyId(), updatesDelta );
         }
@@ -102,7 +109,7 @@ public class NeoStoreIndexStoreView implements IndexStoreView
     @Override
     public DoubleLongRegister indexSample( IndexDescriptor descriptor, DoubleLongRegister output )
     {
-        return counts.indexSample( descriptor.getLabelId(), descriptor.getPropertyKeyId(), output );
+        return dualCountsAccessor.indexSample( descriptor.getLabelId(), descriptor.getPropertyKeyId(), output );
     }
 
     @Override

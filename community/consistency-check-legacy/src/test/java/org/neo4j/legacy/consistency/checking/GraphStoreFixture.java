@@ -48,6 +48,7 @@ import org.neo4j.kernel.impl.storageengine.impl.recordstorage.RecordStorageEngin
 import org.neo4j.kernel.impl.store.NodeLabelsField;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.StoreAccess;
+import org.neo4j.kernel.impl.store.counts.CountsStorageServiceImpl;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.NeoStoreRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -87,7 +88,8 @@ public abstract class GraphStoreFixture extends PageCacheRule implements TestRul
             PageCache pageCache = getPageCache( fileSystem );
             StoreAccess nativeStores = new StoreAccess( fileSystem, pageCache, directory ).initialize();
             IndexStoreView indexStoreView =
-                    new NeoStoreIndexStoreView( LockService.NO_LOCK_SERVICE, nativeStores.getRawNeoStores() );
+                    new NeoStoreIndexStoreView( LockService.NO_LOCK_SERVICE, nativeStores.getRawNeoStores(),
+                            new CountsStorageServiceImpl() );//TODO review
             directStoreAccess = new DirectStoreAccess(
                     nativeStores,
                     new LuceneLabelScanStoreBuilder(

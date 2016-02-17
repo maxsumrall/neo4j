@@ -45,6 +45,7 @@ import org.neo4j.kernel.impl.pagecache.ConfiguringPageCacheFactory;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.StoreAccess;
 import org.neo4j.kernel.impl.store.StoreFactory;
+import org.neo4j.kernel.impl.store.counts.CountsStorageServiceImpl;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.transaction.state.NeoStoreIndexStoreView;
 import org.neo4j.legacy.consistency.checking.full.ConsistencyCheckIncompleteException;
@@ -138,7 +139,8 @@ public class ConsistencyCheckService
             try
             {
                 NeoStoreIndexStoreView indexStoreView =
-                        new NeoStoreIndexStoreView( LockService.NO_LOCK_SERVICE, store.getRawNeoStores() );
+                        new NeoStoreIndexStoreView( LockService.NO_LOCK_SERVICE, store.getRawNeoStores(),
+                                new CountsStorageServiceImpl() );
                 labelScanStore = new LuceneLabelScanStoreBuilder(
                         storeDir, fullStoreLabelUpdateStream( () -> indexStoreView ),
                         fileSystem, logProvider ).build();

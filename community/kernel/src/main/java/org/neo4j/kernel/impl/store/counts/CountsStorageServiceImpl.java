@@ -19,6 +19,8 @@
  */
 package org.neo4j.kernel.impl.store.counts;
 
+import java.util.Optional;
+
 import org.neo4j.kernel.impl.api.CountsVisitor;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
 import org.neo4j.kernel.impl.store.counts.keys.IndexSampleKey;
@@ -34,6 +36,7 @@ public class CountsStorageServiceImpl implements CountsStorageService
     private CountsStore countsStore;
     private IndexStatsUpdater indexStatsUpdater;
     private final UpdaterFactory updaterFactory = new UpdaterFactory();
+    private final long[] defaultValue = new long[]{0, 0};
 
     @Override
     public CountsSnapshot snapshot( long txId )
@@ -61,7 +64,8 @@ public class CountsStorageServiceImpl implements CountsStorageService
     @Override
     public Register.DoubleLongRegister nodeCount( int labelId, Register.DoubleLongRegister target )
     {
-        long value = countsStore.get( CountsKeyFactory.nodeKey( labelId ) )[0];
+        long value =
+                Optional.ofNullable( countsStore.get( CountsKeyFactory.nodeKey( labelId ) )[0] ).orElse( defaultValue()[0] );
         target.write( 0, value );
         return target;
     }
@@ -70,7 +74,9 @@ public class CountsStorageServiceImpl implements CountsStorageService
     public Register.DoubleLongRegister relationshipCount( int startLabelId, int typeId, int endLabelId,
             Register.DoubleLongRegister target )
     {
-        long value = countsStore.get( CountsKeyFactory.relationshipKey( startLabelId, typeId, endLabelId ) )[0];
+        long value = Optional.ofNullable(
+                countsStore.get( CountsKeyFactory.relationshipKey( startLabelId, typeId, endLabelId ) )[0] )
+                .orElse( defaultValue()[0] );
         target.write( 0, value );
         return target;
     }
@@ -79,7 +85,8 @@ public class CountsStorageServiceImpl implements CountsStorageService
     public Register.DoubleLongRegister indexUpdatesAndSize( int labelId, int propertyKeyId,
             Register.DoubleLongRegister target )
     {
-        long[] values = countsStore.get( CountsKeyFactory.indexStatisticsKey( labelId, propertyKeyId ) );
+        long[] values = Optional.ofNullable( countsStore.get( CountsKeyFactory.indexStatisticsKey( labelId, propertyKeyId ) ) )
+                .orElse( defaultValue() );
         target.write( values[0], values[1] );
         return target;
     }
@@ -87,9 +94,15 @@ public class CountsStorageServiceImpl implements CountsStorageService
     @Override
     public Register.DoubleLongRegister indexSample( int labelId, int propertyKeyId, Register.DoubleLongRegister target )
     {
-        long[] values = countsStore.get( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ) );
+        long[] values = Optional.ofNullable( countsStore.get( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ) ) )
+                .orElse( defaultValue() );
         target.write( values[0], values[1] );
         return target;
+    }
+
+    private long[] defaultValue()
+    {
+        return defaultValue;
     }
 
     @Override

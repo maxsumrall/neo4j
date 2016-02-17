@@ -25,12 +25,12 @@ import org.neo4j.kernel.impl.store.counts.CountsStorageService;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
 import org.neo4j.storageengine.api.TransactionApplicationMode;
 
-public class DualCountsStoreUpdater implements CountsAccessor.Updater
+public class DualCountsStoreIncrementor implements CountsAccessor.Updater
 {
     private final CountsTracker.Updater countsTrackerUpdater;
     private final CountsAccessor.Updater countsStorageUpdater;
 
-    public DualCountsStoreUpdater( long txId, CountsStorageService countsStorageService, CountsTracker countsTracker,
+    public DualCountsStoreIncrementor( long txId, CountsStorageService countsStorageService, CountsTracker countsTracker,
             TransactionApplicationMode mode )
     {
         countsStorageUpdater = countsStorageService.apply( txId, mode );

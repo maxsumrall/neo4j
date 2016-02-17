@@ -45,7 +45,7 @@ class IndexStatsUpdaterFactory
             @Override
             public void incrementIndexUpdates( int labelId, int propertyKeyId, long delta )
             {
-                countsStore.update( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ), new long[]{delta} );
+                countsStore.update( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ), new long[]{delta, 0} );
             }
 
             @Override
