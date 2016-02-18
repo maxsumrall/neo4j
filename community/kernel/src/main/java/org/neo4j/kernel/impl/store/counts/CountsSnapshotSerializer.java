@@ -20,14 +20,13 @@
 package org.neo4j.kernel.impl.store.counts;
 
 import java.io.IOException;
-import java.util.Map;
 
+import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 import org.neo4j.kernel.impl.store.counts.keys.IndexSampleKey;
 import org.neo4j.kernel.impl.store.counts.keys.IndexStatisticsKey;
 import org.neo4j.kernel.impl.store.counts.keys.NodeKey;
 import org.neo4j.kernel.impl.store.counts.keys.RelationshipKey;
-import org.neo4j.kernel.impl.transaction.log.FlushableChannel;
 
 import static org.neo4j.kernel.impl.store.counts.keys.CountsKeyType.ENTITY_NODE;
 import static org.neo4j.kernel.impl.store.counts.keys.CountsKeyType.ENTITY_RELATIONSHIP;
@@ -36,80 +35,77 @@ import static org.neo4j.kernel.impl.store.counts.keys.CountsKeyType.INDEX_STATIS
 
 public class CountsSnapshotSerializer
 {
-    public static void serialize( FlushableChannel channel, CountsSnapshot countsSnapshot )
-            throws IOException
+    public static void serializeHeader( PageCursor cursor, long txId, int size )
     {
-        channel.putLong( countsSnapshot.getTxId() );
-        channel.putInt( countsSnapshot.getMap().size() );
+        cursor.putLong( txId );
+        cursor.putInt( size );
+    }
 
-        for ( Map.Entry<CountsKey,long[]> pair : countsSnapshot.getMap().entrySet() )
+    public static void serialize( PageCursor cursor, CountsKey key, long[] value ) throws IOException
+    {
+        switch ( key.recordType() )
         {
-            CountsKey key = pair.getKey();
-            long[] value = pair.getValue();
 
-            switch ( key.recordType() )
+        case ENTITY_NODE:
+            if ( value.length != 1 )
             {
-
-            case ENTITY_NODE:
-                if ( value.length != 1 )
-                {
-                    throw new IllegalArgumentException(
-                            "CountsKey of type " + key.recordType() + " has an unexpected value." );
-                }
-                NodeKey nodeKey = (NodeKey) key;
-                channel.put( ENTITY_NODE.code );
-                channel.putInt( nodeKey.getLabelId() );
-                channel.putLong( value[0] );
-                break;
-
-            case ENTITY_RELATIONSHIP:
-                if ( value.length != 1 )
-                {
-                    throw new IllegalArgumentException(
-                            "CountsKey of type " + key.recordType() + " has an unexpected value." );
-                }
-                RelationshipKey relationshipKey = (RelationshipKey) key;
-                channel.put( ENTITY_RELATIONSHIP.code );
-                channel.putInt( relationshipKey.getStartLabelId() );
-                channel.putInt( relationshipKey.getTypeId() );
-                channel.putInt( relationshipKey.getEndLabelId() );
-                channel.putLong( value[0] );
-                break;
-
-            case INDEX_SAMPLE:
-                if ( value.length != 2 )
-                {
-                    throw new IllegalArgumentException(
-                            "CountsKey of type " + key.recordType() + " has an unexpected value." );
-                }
-                IndexSampleKey indexSampleKey = (IndexSampleKey) key;
-                channel.put( INDEX_SAMPLE.code );
-                channel.putInt( indexSampleKey.labelId() );
-                channel.putInt( indexSampleKey.propertyKeyId() );
-                channel.putLong( value[0] );
-                channel.putLong( value[1] );
-                break;
-
-            case INDEX_STATISTICS:
-                if ( value.length != 2 )
-                {
-                    throw new IllegalArgumentException(
-                            "CountsKey of type " + key.recordType() + " has an unexpected value." );
-                }
-                IndexStatisticsKey indexStatisticsKey = (IndexStatisticsKey) key;
-                channel.put( INDEX_STATISTICS.code );
-                channel.putInt( indexStatisticsKey.labelId() );
-                channel.putInt( indexStatisticsKey.propertyKeyId() );
-                channel.putLong( value[0] );
-                channel.putLong( value[1] );
-                break;
-
-            case EMPTY:
-                throw new IllegalArgumentException( "CountsKey of type EMPTY cannot be serialized." );
-
-            default:
-                throw new IllegalArgumentException( "The read CountsKey has an unknown type." );
+                throw new IllegalArgumentException(
+                        "CountsKey of type " + key.recordType() + " has an unexpected value." );
             }
+            NodeKey nodeKey = (NodeKey) key;
+            cursor.putByte( ENTITY_NODE.code );
+            cursor.putInt( nodeKey.getLabelId() );
+            cursor.putLong( value[0] );
+            break;
+
+        case ENTITY_RELATIONSHIP:
+            if ( value.length != 1 )
+            {
+                throw new IllegalArgumentException(
+                        "CountsKey of type " + key.recordType() + " has an unexpected value." );
+            }
+            RelationshipKey relationshipKey = (RelationshipKey) key;
+            cursor.putByte( ENTITY_RELATIONSHIP.code );
+            cursor.putInt( relationshipKey.getStartLabelId() );
+            cursor.putInt( relationshipKey.getTypeId() );
+            cursor.putInt( relationshipKey.getEndLabelId() );
+            cursor.putLong( value[0] );
+            break;
+
+        case INDEX_SAMPLE:
+            if ( value.length != 2 )
+            {
+                throw new IllegalArgumentException(
+                        "CountsKey of type " + key.recordType() + " has an unexpected value." );
+            }
+            IndexSampleKey indexSampleKey = (IndexSampleKey) key;
+            cursor.putByte( INDEX_SAMPLE.code );
+            cursor.putInt( indexSampleKey.labelId() );
+            cursor.putInt( indexSampleKey.propertyKeyId() );
+            cursor.putLong( value[0] );
+            cursor.putLong( value[1] );
+            break;
+
+        case INDEX_STATISTICS:
+            if ( value.length != 2 )
+            {
+                throw new IllegalArgumentException(
+                        "CountsKey of type " + key.recordType() + " has an unexpected value." );
+            }
+            IndexStatisticsKey indexStatisticsKey = (IndexStatisticsKey) key;
+            cursor.putByte( INDEX_STATISTICS.code );
+            cursor.putInt( indexStatisticsKey.labelId() );
+            cursor.putInt( indexStatisticsKey.propertyKeyId() );
+            cursor.putLong( value[0] );
+            cursor.putLong( value[1] );
+            break;
+
+        case EMPTY:
+            throw new IllegalArgumentException( "CountsKey of type EMPTY cannot be serialized." );
+
+        default:
+            throw new IllegalArgumentException( "The read CountsKey has an unknown type." );
+
         }
     }
 }

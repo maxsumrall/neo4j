@@ -40,6 +40,7 @@ import org.neo4j.kernel.impl.store.RelationshipGroupStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.RelationshipTypeTokenStore;
 import org.neo4j.kernel.impl.store.SchemaStore;
+import org.neo4j.kernel.impl.store.StatisticsStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
 import org.neo4j.kernel.impl.store.format.lowlimit.LowLimit;
@@ -164,9 +165,9 @@ public enum StoreFile
                 }
             },
 
-    NEW_COUNTS_STORE(
-            "NewCountsStore",
-            StoreFactory.NEW_COUNTS_STORE,
+    STATISTICS_STORE(
+            StatisticsStore.TYPE_DESCRIPTOR,
+            StoreFactory.STATISTICS_STORE,
             LowLimit.STORE_VERSION //TODO This should move to a common place e.g. store factory.
     )
             {

@@ -22,8 +22,8 @@ package org.neo4j.kernel.impl.store;
 import java.io.IOException;
 
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
+import org.neo4j.kernel.impl.store.id.IdType;
 
 public enum StoreType
 {
@@ -166,12 +166,12 @@ public enum StoreType
                     }
                 }
             },
-    NEW_COUNTS( StoreFactory.NEW_COUNTS_STORE, false )
+    STATISTICS( StoreFactory.STATISTICS_STORE, false )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
                 {
-                    return neoStores.createNewCountsStore( getStoreName() );
+                    return neoStores.createStatisticsStore( getStoreName() );
                 }
             },
     META_DATA( MetaDataStore.DEFAULT_NAME ) // Make sure this META store is last

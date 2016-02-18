@@ -26,11 +26,11 @@ import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
-import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
-import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.store.format.InternalRecordFormatSelector;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
+import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
+import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.logging.LogProvider;
 
 /**
@@ -60,7 +60,7 @@ public class StoreFactory
     public static final String SCHEMA_STORE_NAME = ".schemastore.db";
     public static final String RELATIONSHIP_GROUP_STORE_NAME = ".relationshipgroupstore.db";
     public static final String COUNTS_STORE = ".counts.db";
-    public static final String NEW_COUNTS_STORE = ".new.counts.db";
+    public static final String STATISTICS_STORE = ".statistics.db";
 
     private Config config;
     private IdGeneratorFactory idGeneratorFactory;
