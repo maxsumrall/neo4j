@@ -17,6 +17,7 @@ import org.neo4j.kernel.impl.store.format.RecordFormat;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
+import org.neo4j.kernel.impl.store.record.statistics.NodeWithLabelCount;
 import org.neo4j.kernel.impl.store.record.statistics.StatisticsRecord;
 import org.neo4j.logging.LogProvider;
 
@@ -48,15 +49,15 @@ public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoSt
         StatisticsRecord reusedRecord = new StatisticsRecord( -1 );
 
         StatisticsRecord record = getRecord( 0, reusedRecord, RecordLoad.NORMAL );
-        long txid  = record.getId();
+        long txid  = ((NodeWithLabelCount) record.getEntry()).count();
 
         for ( int i = 1; i < getHighId(); i++ )
         {
-            StatisticsRecord record = getRecord( i, reusedRecord, RecordLoad.NORMAL );
+            record = getRecord( i, reusedRecord, RecordLoad.NORMAL );
             Pair<CountsKey,long[]> pair = record.getEntry().asSnapshotEntry();
             map.put( pair.first(), pair.other() );
         }
-        return new CountsSnapshot( 1, map );
+        return new CountsSnapshot( txid, map );
     }
 
     public void write( CountsSnapshot snapshot ) throws IOException

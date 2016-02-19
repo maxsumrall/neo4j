@@ -19,35 +19,196 @@
  */
 package org.neo4j.kernel.impl.store.counts;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+
 import org.neo4j.kernel.impl.api.CountsAccessor;
 import org.neo4j.kernel.impl.api.CountsVisitor;
+import org.neo4j.kernel.impl.store.CountsComputer;
+import org.neo4j.kernel.impl.store.StatisticsStore;
+import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
+import org.neo4j.kernel.impl.store.counts.keys.IndexSampleKey;
+import org.neo4j.kernel.impl.store.counts.keys.IndexStatisticsKey;
+import org.neo4j.kernel.impl.store.counts.keys.NodeKey;
+import org.neo4j.kernel.impl.store.counts.keys.RelationshipKey;
+import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 import org.neo4j.kernel.internal.DatabaseHealth;
+import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.register.Register;
 
-interface CountsStorageService extends CountsAccessor, CountsVisitor.Visitable
+import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_ID;
+
+public class CountsStorageService implements CountsAccessor, CountsVisitor.Visitable, Lifecycle
 {
-    CountsAccessor.Updater updaterFor( long txId );
+    private CountsStore countsStore;
+    private IndexStatsUpdater indexStatsUpdater;
+    private final UpdaterFactory updaterFactory;
+    private StatisticsStore statisticsStore;
+    private final TransactionIdStore txIdStore;
+    private final CountsComputer countsComputer;
+    private final DatabaseHealth databaseHealth;
+    private boolean needsRebuild = false;
 
-    CountsAccessor.IndexStatsUpdater indexStatsUpdater();
-
-    Updater apply(long txId);
+    public CountsStorageService( StatisticsStore statisticsStore, TransactionIdStore txIdStore,
+            CountsComputer countsComputer, DatabaseHealth databaseHealth )
+    {
+        this.statisticsStore = statisticsStore;
+        this.txIdStore = txIdStore;
+        this.countsComputer = countsComputer;
+        this.databaseHealth = databaseHealth;
+        indexStatsUpdater = new IndexStatsUpdaterFactory().indexStatsUpdater( countsStore );
+        updaterFactory = new UpdaterFactory();
+    }
 
     @Override
-    Register.DoubleLongRegister nodeCount( int labelId, Register.DoubleLongRegister target );
+    public void init() throws Throwable
+    {
+        CountsSnapshot snapshot = statisticsStore.read();
+
+        if ( snapshot == null )
+        {
+            needsRebuild = true;
+
+        }
+        else
+        {
+            countsStore = new InMemoryCountsStore( snapshot, databaseHealth );
+        }
+    }
 
     @Override
-    Register.DoubleLongRegister relationshipCount( int startLabelId, int typeId, int endLabelId,
-            Register.DoubleLongRegister target );
+    public void start() throws Throwable
+    {
+        if ( needsRebuild )
+        {
+            // + init countsStore to an empty InMemoryCountsStore
+            // + get updater and init/run CountsComputer
+            // take snapshot and write it to SS
+            countsStore = new InMemoryCountsStore( databaseHealth );
+            try ( Updater updater = updaterFor( BASE_TX_ID ) )
+            {
+                countsComputer.initialize( updater );
+            }
+            this.countsStore = new InMemoryCountsStore( countsStore.snapshot( BASE_TX_ID ), databaseHealth );
+        }
+    }
 
     @Override
-    Register.DoubleLongRegister indexUpdatesAndSize( int labelId, int propertyKeyId,
-            Register.DoubleLongRegister target );
+    public void stop() throws Throwable
+    {
+    }
 
     @Override
-    Register.DoubleLongRegister indexSample( int labelId, int propertyKeyId, Register.DoubleLongRegister target );
+    public void shutdown() throws Throwable
+    {
+    }
+
+    public void flush()
+    {
+        try
+        {
+            long lastCommittedTxId = txIdStore.getLastCommittedTransactionId();
+            CountsSnapshot snapshot = countsStore.snapshot( lastCommittedTxId );
+            statisticsStore.write( snapshot );
+        }
+        catch ( IOException e )
+        {
+            throw new UncheckedIOException( e );
+        }
+    }
+
+    public void setInitializer( IndexStatsUpdater indexStatsUpdater )
+    {
+        this.indexStatsUpdater = indexStatsUpdater;
+    }
+
+    public Updater updaterFor( long txId )
+    {
+        return updaterFactory.getUpdater( countsStore, txId );
+    }
+
+    public IndexStatsUpdater indexStatsUpdater()
+    {
+        return indexStatsUpdater;
+    }
+
+    public Updater apply( long txId )
+    {
+        return updaterFor( txId );
+    }
 
     @Override
-    void accept( CountsVisitor visitor );
+    public Register.DoubleLongRegister nodeCount( int labelId, Register.DoubleLongRegister target )
+    {
+        long value = countsStore.get( CountsKeyFactory.nodeKey( labelId ) )[0];
+        target.write( 0, value );
+        return target;
+    }
 
-    void initialize( CountsSnapshot snapshot, DatabaseHealth databaseHealth );
+    @Override
+    public Register.DoubleLongRegister relationshipCount( int startLabelId, int typeId, int endLabelId,
+            Register.DoubleLongRegister target )
+    {
+        long value = countsStore.get( CountsKeyFactory.relationshipKey( startLabelId, typeId, endLabelId ) )[0];
+        target.write( 0, value );
+        return target;
+    }
+
+    @Override
+    public Register.DoubleLongRegister indexUpdatesAndSize( int labelId, int propertyKeyId,
+            Register.DoubleLongRegister target )
+    {
+        long[] values = countsStore.get( CountsKeyFactory.indexStatisticsKey( labelId, propertyKeyId ) );
+        target.write( values[0], values[1] );
+        return target;
+    }
+
+    @Override
+    public Register.DoubleLongRegister indexSample( int labelId, int propertyKeyId, Register.DoubleLongRegister target )
+    {
+        long[] values = countsStore.get( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ) );
+        target.write( values[0], values[1] );
+        return target;
+    }
+
+    @Override
+    public void accept( CountsVisitor visitor )
+    {
+        countsStore.forEach( ( countsKey, values ) -> {
+            switch ( countsKey.recordType() )
+            {
+            case ENTITY_NODE:
+            {
+                visitor.visitNodeCount( ((NodeKey) countsKey).getLabelId(), values[0] );
+                break;
+            }
+            case ENTITY_RELATIONSHIP:
+            {
+                RelationshipKey k = (RelationshipKey) countsKey;
+                visitor.visitRelationshipCount( k.getStartLabelId(), k.getTypeId(), k.getEndLabelId(), values[0] );
+                break;
+            }
+            case INDEX_STATISTICS:
+            {
+                IndexStatisticsKey key = (IndexStatisticsKey) countsKey;
+                visitor.visitIndexStatistics( key.labelId(), key.propertyKeyId(), values[0], values[1] );
+                break;
+            }
+            case INDEX_SAMPLE:
+            {
+                IndexSampleKey key = (IndexSampleKey) countsKey;
+                visitor.visitIndexSample( key.labelId(), key.propertyKeyId(), values[0], values[1] );
+                break;
+            }
+            default:
+                throw new IllegalStateException( "unexpected counts key " + countsKey );
+            }
+        } );
+    }
+
+    public void initialize( CountsSnapshot snapshot, DatabaseHealth databaseHealth )
+    {
+        countsStore = new InMemoryCountsStore( snapshot, databaseHealth );
+        indexStatsUpdater = new IndexStatsUpdaterFactory().indexStatsUpdater( countsStore );
+    }
 }

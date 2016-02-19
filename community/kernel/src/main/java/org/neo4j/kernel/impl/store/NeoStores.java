@@ -345,6 +345,11 @@ public class NeoStores implements AutoCloseable
         return (CountsTracker) getStore( StoreType.COUNTS );
     }
 
+    public StatisticsStore getStatisticsStore()
+    {
+        return (StatisticsStore) getStore( StoreType.STATISTICS );
+    }
+
     private CountsTracker createWritableCountsTracker( File fileName )
     {
         return new CountsTracker( logProvider, fileSystemAbstraction, pageCache, config, fileName );
