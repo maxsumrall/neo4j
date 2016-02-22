@@ -32,6 +32,7 @@ import org.neo4j.kernel.impl.store.counts.keys.IndexSampleKey;
 import org.neo4j.kernel.impl.store.counts.keys.IndexStatisticsKey;
 import org.neo4j.kernel.impl.store.counts.keys.NodeKey;
 import org.neo4j.kernel.impl.store.counts.keys.RelationshipKey;
+import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -358,6 +359,6 @@ public class InMemoryCountsStoreTest
 
     private InMemoryCountsStore createCountStore()
     {
-        return new InMemoryCountsStore( new AlwaysHappyDatabaseHealth() );
+        return new InMemoryCountsStore( TransactionIdStore.BASE_TX_ID, new AlwaysHappyDatabaseHealth() );
     }
 }

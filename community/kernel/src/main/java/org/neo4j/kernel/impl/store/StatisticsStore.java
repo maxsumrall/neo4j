@@ -8,7 +8,6 @@ import java.util.Map;
 
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.io.pagecache.PageCache;
-import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.store.counts.CountsSnapshot;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
@@ -25,6 +24,9 @@ public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoSt
 {
     public static final String TYPE_DESCRIPTOR = "StatisticsStore";
 
+    // todo: special key is required for this
+    private static final CountsKey LAST_APPLIED_TX_KEY = CountsKeyFactory.nodeKey( -42 );
+
     public StatisticsStore( File fileName, Config configuration, IdType idType, IdGeneratorFactory idGeneratorFactory,
             PageCache pageCache, LogProvider logProvider, RecordFormat<StatisticsRecord> recordFormat,
             String storeVersion )
@@ -34,22 +36,23 @@ public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoSt
     }
 
     @Override
-    protected void loadStorage()
-    {
-    }
-
-    @Override
     public void flush()
     {
     }
 
     public CountsSnapshot read() throws IOException
     {
+        if ( !isInUse( 0 ) )
+        {
+            return null;
+        }
+
         Map<CountsKey,long[]> map = new HashMap<>();
+
         StatisticsRecord reusedRecord = new StatisticsRecord( -1 );
 
         StatisticsRecord record = getRecord( 0, reusedRecord, RecordLoad.NORMAL );
-        long txid  = ((NodeWithLabelCount) record.getEntry()).count();
+        long txId = ((NodeWithLabelCount) record.getEntry()).count();
 
         for ( int i = 1; i < getHighId(); i++ )
         {
@@ -57,34 +60,50 @@ public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoSt
             Pair<CountsKey,long[]> pair = record.getEntry().asSnapshotEntry();
             map.put( pair.first(), pair.other() );
         }
-        return new CountsSnapshot( txid, map );
+        return new CountsSnapshot( txId, map );
     }
 
     public void write( CountsSnapshot snapshot ) throws IOException
     {
-        long highId = getHighId();
-        for ( long id = 0; id < highId; id++ )
-        {
-            freeId( id );
-        }
-        try ( PagedFile pagedFile = createPagedFile( StandardOpenOption.TRUNCATE_EXISTING ) )
-        {
-            storeFile = pagedFile;
-            long id = 0;
+        clearStoreFiles();
 
-            StatisticsRecord lastTxIdRecord =
-                    new StatisticsRecord( id, CountsKeyFactory.nodeKey( -1 ), new long[]{snapshot.getTxId()} );
-            updateRecord( lastTxIdRecord );
-            id++;
+        StatisticsRecord lastTxIdRecord =
+                newRecordForWrite( nextId(), LAST_APPLIED_TX_KEY, new long[]{snapshot.getTxId()} );
+        updateRecord( lastTxIdRecord );
 
-            for ( Map.Entry<CountsKey,long[]> entry : snapshot.getMap().entrySet() )
-            {
-                StatisticsRecord record = new StatisticsRecord( id, entry.getKey(), entry.getValue() );
-                updateRecord( record );
-                id++;
-            }
-            storeFile.flushAndForce();
+        for ( Map.Entry<CountsKey,long[]> entry : snapshot.getMap().entrySet() )
+        {
+            StatisticsRecord record = newRecordForWrite( nextId(), entry.getKey(), entry.getValue() );
+            updateRecord( record );
         }
-        storeFile = null;
+        storeFile.flushAndForce();
+    }
+
+    private void clearStoreFiles()
+    {
+        truncateAndReopenStoreFile();
+        rebuildIdGenerator();
+    }
+
+    private void truncateAndReopenStoreFile()
+    {
+        try
+        {
+            storeFile.close();
+            storeFile = createPagedFile( StandardOpenOption.TRUNCATE_EXISTING );
+        }
+        catch ( IOException e )
+        {
+            throw new UnderlyingStorageException( e );
+        }
+    }
+
+    private static StatisticsRecord newRecordForWrite( long id, CountsKey key, long[] value )
+    {
+        StatisticsRecord record = new StatisticsRecord( id, key, value );
+        record.setInUse( true );
+        record.setCreated();
+        record.setRequiresSecondaryUnit( false );
+        return record;
     }
 }

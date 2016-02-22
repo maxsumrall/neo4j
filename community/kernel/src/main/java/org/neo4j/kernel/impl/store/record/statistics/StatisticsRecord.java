@@ -41,7 +41,7 @@ public class StatisticsRecord extends AbstractBaseRecord
                     indexSampleKey.labelId(),
                     indexSampleKey.propertyKeyId(),
                     value[0],
-                    value[1]);
+                    value[1] );
             break;
         case INDEX_STATISTICS:
             IndexStatisticsKey indexStatisticsKey = (IndexStatisticsKey) key;
@@ -49,7 +49,7 @@ public class StatisticsRecord extends AbstractBaseRecord
                     indexStatisticsKey.labelId(),
                     indexStatisticsKey.propertyKeyId(),
                     value[0],
-                    value[1]);
+                    value[1] );
             break;
         default:
             throw new IllegalArgumentException();
@@ -64,5 +64,14 @@ public class StatisticsRecord extends AbstractBaseRecord
     public void setEntry( StatisticsEntry entry )
     {
         this.entry = entry;
+    }
+
+    @Override
+    public String toString()
+    {
+        return "StatisticsRecord{" +
+               "inUse=" + inUse() +
+               ", entry=" + entry +
+               '}';
     }
 }

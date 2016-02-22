@@ -34,6 +34,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
+import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.assertArrayEquals;
@@ -238,6 +239,6 @@ public class InMemoryCountsStoreIntegrationTest
 
     private InMemoryCountsStore getCountsStore()
     {
-        return new InMemoryCountsStore( new AlwaysHappyDatabaseHealth() );
+        return new InMemoryCountsStore( TransactionIdStore.BASE_TX_ID, new AlwaysHappyDatabaseHealth() );
     }
 }

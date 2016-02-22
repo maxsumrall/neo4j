@@ -55,7 +55,7 @@ import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.SchemaStorage;
 import org.neo4j.kernel.impl.store.UnderlyingStorageException;
-import org.neo4j.kernel.impl.store.counts.CountsTracker;
+import org.neo4j.kernel.impl.store.counts.CountsStorageService;
 import org.neo4j.kernel.impl.store.record.IndexRule;
 import org.neo4j.kernel.impl.store.record.NodePropertyConstraintRule;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -107,13 +107,14 @@ public class DiskLayer implements StoreReadLayer
     private final NodeStore nodeStore;
     private final RelationshipStore relationshipStore;
     private final SchemaStorage schemaStorage;
-    private final CountsTracker counts;
+    private final CountsStorageService countsStorageService;
     private final PropertyLoader propertyLoader;
     private final Supplier<StorageStatement> statementProvider;
 
     public DiskLayer( PropertyKeyTokenHolder propertyKeyTokenHolder, LabelTokenHolder labelTokenHolder,
             RelationshipTypeTokenHolder relationshipTokenHolder, SchemaStorage schemaStorage, NeoStores neoStores,
-            IndexingService indexService, Supplier<StorageStatement> statementProvider )
+            IndexingService indexService, Supplier<StorageStatement> statementProvider,
+            CountsStorageService countsStorageService )
     {
         this.relationshipTokenHolder = relationshipTokenHolder;
         this.schemaStorage = schemaStorage;
@@ -124,7 +125,7 @@ public class DiskLayer implements StoreReadLayer
         this.statementProvider = statementProvider;
         this.nodeStore = this.neoStores.getNodeStore();
         this.relationshipStore = this.neoStores.getRelationshipStore();
-        this.counts = neoStores.getCounts();
+        this.countsStorageService = countsStorageService;
         this.propertyLoader = new PropertyLoader( neoStores );
     }
 
@@ -560,7 +561,7 @@ public class DiskLayer implements StoreReadLayer
     @Override
     public long countsForNode( int labelId )
     {
-        return counts.nodeCount( labelId, newDoubleLongRegister() ).readSecond();
+        return countsStorageService.nodeCount( labelId, newDoubleLongRegister() ).readSecond();
     }
 
     @Override
@@ -570,7 +571,7 @@ public class DiskLayer implements StoreReadLayer
         {
             throw new UnsupportedOperationException( "not implemented" );
         }
-        return counts.relationshipCount( startLabelId, typeId, endLabelId, newDoubleLongRegister() ).readSecond();
+        return countsStorageService.relationshipCount( startLabelId, typeId, endLabelId, newDoubleLongRegister() ).readSecond();
     }
 
     @Override
@@ -606,12 +607,12 @@ public class DiskLayer implements StoreReadLayer
     @Override
     public DoubleLongRegister indexUpdatesAndSize( IndexDescriptor index, DoubleLongRegister target )
     {
-        return counts.indexUpdatesAndSize( index.getLabelId(), index.getPropertyKeyId(), target );
+        return countsStorageService.indexUpdatesAndSize( index.getLabelId(), index.getPropertyKeyId(), target );
     }
 
     @Override
     public DoubleLongRegister indexSample( IndexDescriptor index, DoubleLongRegister target )
     {
-        return counts.indexSample( index.getLabelId(), index.getPropertyKeyId(), target );
+        return countsStorageService.indexSample( index.getLabelId(), index.getPropertyKeyId(), target );
     }
 }

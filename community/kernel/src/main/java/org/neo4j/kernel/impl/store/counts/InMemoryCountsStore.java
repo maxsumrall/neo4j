@@ -39,6 +39,8 @@ import static org.neo4j.function.Predicates.awaitForever;
 public class InMemoryCountsStore implements CountsStore
 {
     private static final long[] EMPTY_METADATA = {1L};
+    private static final long[] EMPTY_VALUE = {0,0};
+
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     //TODO Always return long, not long[]. This requires splitting index keys into 4 keys, one for each value.
     private final ConcurrentHashMap<CountsKey,long[]> map;
@@ -53,17 +55,17 @@ public class InMemoryCountsStore implements CountsStore
         lastTxId.set( snapshot.getTxId(), EMPTY_METADATA );
     }
 
-    public InMemoryCountsStore(DatabaseHealth databaseHealth)
+    public InMemoryCountsStore(long txId, DatabaseHealth databaseHealth)
     {
         this.databaseHealth = databaseHealth;
         map = new ConcurrentHashMap<>();
-        lastTxId.set( 0, EMPTY_METADATA );
+        lastTxId.set( txId, EMPTY_METADATA );
     }
 
     @Override
     public long[] get( CountsKey key )
     {
-        return map.get( key );
+        return map.getOrDefault( key, EMPTY_VALUE ); // todo: is it ok to return dummy {0,0}?
     }
 
     @Override
@@ -125,7 +127,11 @@ public class InMemoryCountsStore implements CountsStore
             {
                 applyUpdates( pairs, snapshot.getMap() );
             }
-            lastTxId.offer( txId, EMPTY_METADATA );
+            // todo: this is a strange workaround
+            if ( txId != lastTxId.getHighestGapFreeNumber() )
+            {
+                lastTxId.offer( txId, EMPTY_METADATA );
+            }
         }
         finally
         {

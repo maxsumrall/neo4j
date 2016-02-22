@@ -24,6 +24,7 @@ import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.format.lowlimit.LabelTokenRecordFormat;
 import org.neo4j.kernel.impl.store.format.lowlimit.PropertyKeyTokenRecordFormat;
 import org.neo4j.kernel.impl.store.format.lowlimit.RelationshipTypeTokenRecordFormat;
+import org.neo4j.kernel.impl.store.format.lowlimit.StatisticsStoreRecordFormat;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -32,6 +33,7 @@ import org.neo4j.kernel.impl.store.record.PropertyRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
+import org.neo4j.kernel.impl.store.record.statistics.StatisticsRecord;
 
 /**
  * Record format with very high limits, 50-bit per ID, while at the same time keeping store size small.
@@ -65,6 +67,12 @@ public class Aligned implements RecordFormats
     public RecordFormat<RelationshipGroupRecord> relationshipGroup()
     {
         return new RelationshipGroupRecordFormat( new CommunityRecordIO<>() );
+    }
+
+    @Override
+    public RecordFormat<StatisticsRecord> statistics()
+    {
+        return new StatisticsStoreRecordFormat();
     }
 
     @Override

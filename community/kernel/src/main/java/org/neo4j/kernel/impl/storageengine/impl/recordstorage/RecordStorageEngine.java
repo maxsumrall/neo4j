@@ -69,6 +69,7 @@ import org.neo4j.kernel.impl.locking.LockService;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.SchemaStorage;
 import org.neo4j.kernel.impl.store.StoreFactory;
+import org.neo4j.kernel.impl.store.counts.CountsStorageService;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.transaction.command.CacheInvalidationBatchTransactionApplier;
@@ -150,6 +151,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     private final LegacyIndexProviderLookup legacyIndexProviderLookup;
     private final PropertyPhysicalToLogicalConverter indexUpdatesConverter;
     private final StoreStatements storeStatementSupplier;
+    private final CountsStorageService countsStorageService;
 
     // Immutable state for creating/applying commands
     private final Loaders loaders;
@@ -216,10 +218,13 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
 
             labelScanStore = labelScanStoreProvider.getLabelScanStore();
             storeStatementSupplier = storeStatementSupplier( neoStores, config, lockService );
+
+            countsStorageService = new CountsStorageService( neoStores, databaseHealth );
+
             DiskLayer diskLayer = new DiskLayer(
                     propertyKeyTokenHolder, labelTokens, relationshipTypeTokens,
                     schemaStorage, neoStores, indexingService,
-                    storeStatementSupplier );
+                    storeStatementSupplier, countsStorageService );
             storeLayer = new CacheLayer( diskLayer, schemaCache );
 
             legacyIndexApplierLookup = new LegacyIndexApplierLookup.Direct( legacyIndexProviderLookup );
@@ -364,7 +369,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
                         mode ) );
 
         // Counts store application
-        appliers.add( new CountsStoreBatchTransactionApplier( neoStores.getCounts(), mode ) );
+        appliers.add( new CountsStoreBatchTransactionApplier( countsStorageService, mode ) );
 
         // Perform the application
         return new BatchTransactionApplierFacade(
@@ -391,6 +396,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     {
         indexingService.init();
         labelScanStore.init();
+        countsStorageService.init();
     }
 
     @Override
@@ -409,6 +415,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
         loadSchemaCache();
         indexingService.start();
         labelScanStore.start();
+        countsStorageService.start();
     }
 
     @Override
@@ -439,6 +446,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     {
         indexingService.forceAll();
         labelScanStore.force();
+        countsStorageService.force();
 
         for ( IndexImplementation index : legacyIndexProviderLookup.all() )
         {

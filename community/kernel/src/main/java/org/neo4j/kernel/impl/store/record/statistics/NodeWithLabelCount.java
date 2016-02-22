@@ -5,14 +5,15 @@ import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyType;
 
-public class NodeWithLabelCount extends StatisticsEntry {
+public class NodeWithLabelCount extends StatisticsEntry
+{
 
     private final int labelId;
     private final long count;
 
     public NodeWithLabelCount( int labelId, long count )
     {
-        super( CountsKeyType.ENTITY_NODE);
+        super( CountsKeyType.ENTITY_NODE );
         this.labelId = labelId;
         this.count = count;
     }
@@ -30,6 +31,15 @@ public class NodeWithLabelCount extends StatisticsEntry {
     @Override
     public Pair<CountsKey,long[]> asSnapshotEntry()
     {
-        return Pair.of( CountsKeyFactory.nodeKey( labelId ), new long[]{count, 1337} );
+        return Pair.of( CountsKeyFactory.nodeKey( labelId ), new long[]{count} );
+    }
+
+    @Override
+    public String toString()
+    {
+        return "NodeWithLabelCount{" +
+               "labelId=" + labelId +
+               ", count=" + count +
+               '}';
     }
 }

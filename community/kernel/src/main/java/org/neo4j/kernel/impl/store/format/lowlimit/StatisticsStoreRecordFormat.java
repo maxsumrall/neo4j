@@ -1,9 +1,12 @@
 package org.neo4j.kernel.impl.store.format.lowlimit;
 
+import java.io.IOException;
+
 import org.neo4j.io.pagecache.PageCursor;
+import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyType;
-import org.neo4j.kernel.impl.store.format.BaseRecordFormat;
-import org.neo4j.kernel.impl.store.record.RecordLoad;
+import org.neo4j.kernel.impl.store.format.BaseOneByteHeaderRecordFormat;
+import org.neo4j.kernel.impl.store.record.Record;
 import org.neo4j.kernel.impl.store.record.statistics.IndexSampleWithCount;
 import org.neo4j.kernel.impl.store.record.statistics.IndexStatisticsWithCount;
 import org.neo4j.kernel.impl.store.record.statistics.NodeWithLabelCount;
@@ -17,14 +20,14 @@ import static org.neo4j.kernel.impl.store.counts.keys.CountsKeyType.INDEX_SAMPLE
 import static org.neo4j.kernel.impl.store.counts.keys.CountsKeyType.INDEX_STATISTICS;
 import static org.neo4j.kernel.impl.store.counts.keys.CountsKeyType.value;
 
-public class StatisticsStoreRecordFormat extends BaseRecordFormat<StatisticsRecord>
+public class StatisticsStoreRecordFormat extends BaseOneByteHeaderRecordFormat<StatisticsRecord>
 {
     //Largest possible record.
     public static final int RECORD_SIZE = Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES + Integer.BYTES;
 
     public StatisticsStoreRecordFormat()
     {
-        super( fixedRecordSize( RECORD_SIZE ), 0, 0 );
+        super( fixedRecordSize( RECORD_SIZE ), 0, IN_USE_BIT );
     }
 
     @Override
@@ -34,8 +37,11 @@ public class StatisticsStoreRecordFormat extends BaseRecordFormat<StatisticsReco
     }
 
     @Override
-    public void read( StatisticsRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
+    protected void doRead( StatisticsRecord record, PageCursor cursor, int recordSize, PagedFile storeFile,
+            long headerByte, boolean inUse ) throws IOException
     {
+        record.setInUse( inUse );
+
         CountsKeyType type = value( cursor.getByte() );
         switch ( type )
         {
@@ -78,10 +84,14 @@ public class StatisticsStoreRecordFormat extends BaseRecordFormat<StatisticsReco
     }
 
     @Override
-    public void write( StatisticsRecord record, PageCursor cursor )
+    protected void doWrite( StatisticsRecord record, PageCursor cursor, int recordSize, PagedFile storeFile )
+            throws IOException
     {
+        byte inUseByte = (record.inUse() ? Record.IN_USE : Record.NOT_IN_USE).byteValue();
+        cursor.putByte( inUseByte );
+
         StatisticsEntry entry = record.getEntry();
-        switch ( entry.type())
+        switch ( entry.type() )
         {
         case ENTITY_NODE:
             NodeWithLabelCount nodeWithLabelCount = (NodeWithLabelCount) entry;
@@ -102,7 +112,7 @@ public class StatisticsStoreRecordFormat extends BaseRecordFormat<StatisticsReco
         case INDEX_SAMPLE:
             IndexSampleWithCount indexSampleWithCount = (IndexSampleWithCount) entry;
             cursor.putByte( INDEX_SAMPLE.code );
-            cursor.putInt( indexSampleWithCount.getLabelId());
+            cursor.putInt( indexSampleWithCount.getLabelId() );
             cursor.putInt( indexSampleWithCount.getPropertyKeyId() );
             cursor.putLong( indexSampleWithCount.getLong1() );
             cursor.putLong( indexSampleWithCount.getLong2() );
@@ -110,7 +120,7 @@ public class StatisticsStoreRecordFormat extends BaseRecordFormat<StatisticsReco
         case INDEX_STATISTICS:
             IndexStatisticsWithCount indexStatisticsWithCount = (IndexStatisticsWithCount) entry;
             cursor.putByte( INDEX_STATISTICS.code );
-            cursor.putInt( indexStatisticsWithCount.getLabelId());
+            cursor.putInt( indexStatisticsWithCount.getLabelId() );
             cursor.putInt( indexStatisticsWithCount.getPropertyKeyId() );
             cursor.putLong( indexStatisticsWithCount.getLong1() );
             cursor.putLong( indexStatisticsWithCount.getLong2() );

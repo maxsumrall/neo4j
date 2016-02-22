@@ -25,6 +25,7 @@ import java.io.UncheckedIOException;
 import org.neo4j.kernel.impl.api.CountsAccessor;
 import org.neo4j.kernel.impl.api.CountsVisitor;
 import org.neo4j.kernel.impl.store.CountsComputer;
+import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.StatisticsStore;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
 import org.neo4j.kernel.impl.store.counts.keys.IndexSampleKey;
@@ -36,28 +37,24 @@ import org.neo4j.kernel.internal.DatabaseHealth;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.register.Register;
 
-import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_ID;
-
 public class CountsStorageService implements CountsAccessor, CountsVisitor.Visitable, Lifecycle
 {
+    private final CountsTracker countsTracker;
     private CountsStore countsStore;
-    private IndexStatsUpdater indexStatsUpdater;
-    private final UpdaterFactory updaterFactory;
-    private StatisticsStore statisticsStore;
+    private final StatisticsStore statisticsStore;
     private final TransactionIdStore txIdStore;
     private final CountsComputer countsComputer;
     private final DatabaseHealth databaseHealth;
-    private boolean needsRebuild = false;
 
-    public CountsStorageService( StatisticsStore statisticsStore, TransactionIdStore txIdStore,
-            CountsComputer countsComputer, DatabaseHealth databaseHealth )
+    private boolean needsRebuild;
+
+    public CountsStorageService( NeoStores neoStores, DatabaseHealth databaseHealth )
     {
-        this.statisticsStore = statisticsStore;
-        this.txIdStore = txIdStore;
-        this.countsComputer = countsComputer;
+        this.countsTracker = neoStores.getCounts();
+        this.statisticsStore = neoStores.getStatisticsStore();
+        this.txIdStore = neoStores.getMetaDataStore();
+        this.countsComputer = new CountsComputer( neoStores );
         this.databaseHealth = databaseHealth;
-        indexStatsUpdater = new IndexStatsUpdaterFactory().indexStatsUpdater( countsStore );
-        updaterFactory = new UpdaterFactory();
     }
 
     @Override
@@ -68,7 +65,7 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
         if ( snapshot == null )
         {
             needsRebuild = true;
-
+            countsStore = new DummyCountsStore();
         }
         else
         {
@@ -81,15 +78,13 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     {
         if ( needsRebuild )
         {
-            // + init countsStore to an empty InMemoryCountsStore
-            // + get updater and init/run CountsComputer
-            // take snapshot and write it to SS
-            countsStore = new InMemoryCountsStore( databaseHealth );
-            try ( Updater updater = updaterFor( BASE_TX_ID ) )
+            long lastCommittedTransactionId = txIdStore.getLastCommittedTransactionId();
+            countsStore = new InMemoryCountsStore( lastCommittedTransactionId, databaseHealth );
+            try ( Updater updater = updaterFor( lastCommittedTransactionId ) )
             {
                 countsComputer.initialize( updater );
             }
-            this.countsStore = new InMemoryCountsStore( countsStore.snapshot( BASE_TX_ID ), databaseHealth );
+            needsRebuild = false;
         }
     }
 
@@ -103,8 +98,12 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     {
     }
 
-    public void flush()
+    public void force()
     {
+        if ( needsRebuild )
+        {
+            return;
+        }
         try
         {
             long lastCommittedTxId = txIdStore.getLastCommittedTransactionId();
@@ -117,19 +116,15 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
         }
     }
 
-    public void setInitializer( IndexStatsUpdater indexStatsUpdater )
-    {
-        this.indexStatsUpdater = indexStatsUpdater;
-    }
-
     public Updater updaterFor( long txId )
     {
-        return updaterFactory.getUpdater( countsStore, txId );
-    }
-
-    public IndexStatsUpdater indexStatsUpdater()
-    {
-        return indexStatsUpdater;
+        Updater countsTrackerUpdater = countsTracker.apply( txId ).orElse( null );
+        CountsStoreUpdater countsStoreUpdater = new CountsStoreUpdater( txId, countsStore );
+        if ( countsTrackerUpdater == null )
+        {
+            return countsStoreUpdater;
+        }
+        return new MultipleCountsUpdater( new Updater[]{countsTrackerUpdater, countsStoreUpdater} );
     }
 
     public Updater apply( long txId )
@@ -140,7 +135,14 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     @Override
     public Register.DoubleLongRegister nodeCount( int labelId, Register.DoubleLongRegister target )
     {
+        countsTracker.nodeCount( labelId, target );
         long value = countsStore.get( CountsKeyFactory.nodeKey( labelId ) )[0];
+        if ( target.readSecond() != value )
+        {
+            throw new AssertionError(
+                    "Values from countsTracker and countsStore do not match: " + target.readSecond() + " and " +
+                    value );
+        }
         target.write( 0, value );
         return target;
     }
@@ -149,7 +151,14 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     public Register.DoubleLongRegister relationshipCount( int startLabelId, int typeId, int endLabelId,
             Register.DoubleLongRegister target )
     {
+        countsTracker.relationshipCount( startLabelId, typeId, endLabelId, target );
         long value = countsStore.get( CountsKeyFactory.relationshipKey( startLabelId, typeId, endLabelId ) )[0];
+        if ( target.readSecond() != value )
+        {
+            throw new AssertionError(
+                    "Values from countsTracker and countsStore do not match: " + target.readSecond() + " and " +
+                    value );
+        }
         target.write( 0, value );
         return target;
     }
@@ -158,7 +167,14 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     public Register.DoubleLongRegister indexUpdatesAndSize( int labelId, int propertyKeyId,
             Register.DoubleLongRegister target )
     {
+        countsTracker.indexUpdatesAndSize( labelId, propertyKeyId, target );
         long[] values = countsStore.get( CountsKeyFactory.indexStatisticsKey( labelId, propertyKeyId ) );
+        if ( target.readFirst() != values[0] || target.readSecond() != values[1] )
+        {
+            throw new AssertionError(
+                    "Values from countsTracker and countsStore do not match: " + target.readFirst() + " and " +
+                    values[0] + " and " + target.readSecond() + " and " + values[1] );
+        }
         target.write( values[0], values[1] );
         return target;
     }
@@ -166,7 +182,14 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     @Override
     public Register.DoubleLongRegister indexSample( int labelId, int propertyKeyId, Register.DoubleLongRegister target )
     {
+        countsTracker.indexSample( labelId, propertyKeyId, target );
         long[] values = countsStore.get( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ) );
+        if ( target.readFirst() != values[0] || target.readSecond() != values[1] )
+        {
+            throw new AssertionError(
+                    "Values from countsTracker and countsStore do not match: " + target.readFirst() + " and " +
+                    values[0] + " and " + target.readSecond() + " and " + values[1] );
+        }
         target.write( values[0], values[1] );
         return target;
     }
@@ -204,11 +227,5 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
                 throw new IllegalStateException( "unexpected counts key " + countsKey );
             }
         } );
-    }
-
-    public void initialize( CountsSnapshot snapshot, DatabaseHealth databaseHealth )
-    {
-        countsStore = new InMemoryCountsStore( snapshot, databaseHealth );
-        indexStatsUpdater = new IndexStatsUpdaterFactory().indexStatsUpdater( countsStore );
     }
 }

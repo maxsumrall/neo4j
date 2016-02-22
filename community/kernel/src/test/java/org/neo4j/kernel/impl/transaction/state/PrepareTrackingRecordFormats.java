@@ -22,6 +22,7 @@ package org.neo4j.kernel.impl.transaction.state;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
+
 import org.neo4j.io.pagecache.PageCursor;
 import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.kernel.impl.store.StoreHeader;
@@ -38,6 +39,7 @@ import org.neo4j.kernel.impl.store.record.RecordLoad;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
+import org.neo4j.kernel.impl.store.record.statistics.StatisticsRecord;
 
 public class PrepareTrackingRecordFormats implements RecordFormats
 {
@@ -50,6 +52,7 @@ public class PrepareTrackingRecordFormats implements RecordFormats
     private final Set<PropertyKeyTokenRecord> propertyKeyTokenPrepare = new HashSet<>();
     private final Set<LabelTokenRecord> labelTokenPrepare = new HashSet<>();
     private final Set<RelationshipTypeTokenRecord> relationshipTypeTokenPrepare = new HashSet<>();
+    private final Set<StatisticsRecord> statisticsPrepare = new HashSet<>();
 
     public PrepareTrackingRecordFormats( RecordFormats actual )
     {
@@ -72,6 +75,12 @@ public class PrepareTrackingRecordFormats implements RecordFormats
     public PrepareTrackingRecordFormat<RelationshipGroupRecord> relationshipGroup()
     {
         return new PrepareTrackingRecordFormat<>( actual.relationshipGroup(), relationshipGroupPrepare );
+    }
+
+    @Override
+    public RecordFormat<StatisticsRecord> statistics()
+    {
+        return new PrepareTrackingRecordFormat<>( actual.statistics(), statisticsPrepare );
     }
 
     @Override

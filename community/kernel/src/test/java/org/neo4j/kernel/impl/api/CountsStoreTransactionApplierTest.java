@@ -21,10 +21,8 @@ package org.neo4j.kernel.impl.api;
 
 import org.junit.Test;
 
-import java.util.Optional;
-
 import org.neo4j.kernel.api.ReadOperations;
-import org.neo4j.kernel.impl.store.counts.CountsTracker;
+import org.neo4j.kernel.impl.store.counts.CountsStorageService;
 import org.neo4j.kernel.impl.transaction.command.Command;
 import org.neo4j.storageengine.api.TransactionApplicationMode;
 
@@ -40,10 +38,10 @@ public class CountsStoreTransactionApplierTest
     public void shouldNotifyCacheAccessOnHowManyUpdatesOnCountsWeHadSoFar() throws Exception
     {
         // GIVEN
-        final CountsTracker tracker = mock( CountsTracker.class );
-        final CountsAccessor.Updater updater = mock( CountsAccessor.Updater.class );
-        when( tracker.apply( anyLong() ) ).thenReturn( Optional.of( updater ) );
-        final CountsStoreBatchTransactionApplier applier = new CountsStoreBatchTransactionApplier( tracker,
+        CountsStorageService countsStorageService = mock( CountsStorageService.class );
+        CountsAccessor.Updater updater = mock( CountsAccessor.Updater.class );
+        when( countsStorageService.apply( anyLong() ) ).thenReturn( updater );
+        CountsStoreBatchTransactionApplier applier = new CountsStoreBatchTransactionApplier( countsStorageService,
                 TransactionApplicationMode.INTERNAL );
 
         // WHEN
