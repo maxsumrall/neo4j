@@ -23,24 +23,20 @@ import java.io.IOException;
 
 import org.neo4j.kernel.impl.store.counts.CountsStorageService;
 import org.neo4j.storageengine.api.CommandsToApply;
-import org.neo4j.storageengine.api.TransactionApplicationMode;
 
 public class CountsStoreBatchTransactionApplier extends BatchTransactionApplier.Adapter
 {
     private final CountsStorageService countsStorageService;
-    private final TransactionApplicationMode mode;
 
-    public CountsStoreBatchTransactionApplier( CountsStorageService countsStorageService,
-            TransactionApplicationMode mode )
+    public CountsStoreBatchTransactionApplier( CountsStorageService countsStorageService )
     {
         this.countsStorageService = countsStorageService;
-        this.mode = mode;
     }
 
     @Override
     public TransactionApplier startTx( CommandsToApply transaction ) throws IOException
     {
-        CountsAccessor.Updater updater = countsStorageService.updaterFor( transaction.transactionId() );
-        return new CountsStoreTransactionApplier( mode, updater );
+        CountsAccessor.Updater updater = countsStorageService.newTransactionalUpdater( transaction.transactionId() );
+        return new CountsStoreTransactionApplier( updater );
     }
 }

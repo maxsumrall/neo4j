@@ -30,7 +30,7 @@ import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
  * snapshot from. Update transactions may be applied out of order, therefore the returned snapshot may be of the
  * count store at a higher transaction ID value than the requested value.
  */
-interface CountsStore
+public interface CountsStore
 {
     /**
      * Returns the value for the corresponding key in the CountsStore. The length of the returned value depends on
@@ -76,10 +76,20 @@ interface CountsStore
      */
     CountsSnapshot snapshot( long txId );
 
+    CountsSnapshot snapshot();
+
     /**
      * Execute the action on each counts entry of store
      *
      * @param action the action to be called
      */
     void forEach( BiConsumer<CountsKey,long[]> action );
+
+    /**
+      * Checks the given transaction id against the already seen transaction ids and returns true if this transaction
+      * id has been applied to the counts store already.
+      * @param txId
+      * @return True if this txid has already been applied.
+      */
+    boolean seenTx( long txId );
 }

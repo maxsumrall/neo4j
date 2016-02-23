@@ -29,6 +29,7 @@ import java.util.function.BiConsumer;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.kernel.impl.store.UnderlyingStorageException;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
+import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 import org.neo4j.kernel.impl.util.ArrayQueueOutOfOrderSequence;
 import org.neo4j.kernel.impl.util.OutOfOrderSequence;
 import org.neo4j.kernel.internal.DatabaseHealth;
@@ -39,24 +40,36 @@ import static org.neo4j.function.Predicates.awaitForever;
 public class InMemoryCountsStore implements CountsStore
 {
     private static final long[] EMPTY_METADATA = {1L};
-    private static final long[] EMPTY_VALUE = {0,0};
+    private static final long[] EMPTY_VALUE = {0, 0};
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     //TODO Always return long, not long[]. This requires splitting index keys into 4 keys, one for each value.
     private final ConcurrentHashMap<CountsKey,long[]> map;
     private final OutOfOrderSequence lastTxId = new ArrayQueueOutOfOrderSequence( 0L, 100, EMPTY_METADATA );
     private CountsSnapshot snapshot;
+    private final TransactionIdStore txIdStore;
     private final DatabaseHealth databaseHealth;
 
-    public InMemoryCountsStore( CountsSnapshot snapshot, DatabaseHealth databaseHealth )
+    public InMemoryCountsStore( TransactionIdStore txIdStore, DatabaseHealth databaseHealth )
     {
+        this.txIdStore = txIdStore;
+        this.databaseHealth = databaseHealth;
+        map = new ConcurrentHashMap<>();
+        lastTxId.set( txIdStore.getLastCommittedTransactionId(), EMPTY_METADATA );
+    }
+
+    public InMemoryCountsStore( CountsSnapshot snapshot, TransactionIdStore txIdStore, DatabaseHealth databaseHealth )
+    {
+        this.txIdStore = txIdStore;
         this.databaseHealth = databaseHealth;
         map = new ConcurrentHashMap<>( snapshot.getMap() );
         lastTxId.set( snapshot.getTxId(), EMPTY_METADATA );
     }
 
-    public InMemoryCountsStore(long txId, DatabaseHealth databaseHealth)
+    //todo probably remove
+    public InMemoryCountsStore( long txId, DatabaseHealth databaseHealth )
     {
+        txIdStore = null;
         this.databaseHealth = databaseHealth;
         map = new ConcurrentHashMap<>();
         lastTxId.set( txId, EMPTY_METADATA );
@@ -122,16 +135,13 @@ public class InMemoryCountsStore implements CountsStore
         lock.readLock().lock();
         try
         {
+            assert !seenTx( txId );
             applyUpdates( pairs, map );
             if ( snapshot != null && snapshot.getTxId() >= txId )
             {
                 applyUpdates( pairs, snapshot.getMap() );
             }
-            // todo: this is a strange workaround
-            if ( txId != lastTxId.getHighestGapFreeNumber() )
-            {
-                lastTxId.offer( txId, EMPTY_METADATA );
-            }
+            lastTxId.offer( txId, EMPTY_METADATA );
         }
         finally
         {
@@ -175,8 +185,16 @@ public class InMemoryCountsStore implements CountsStore
         return v;
     }
 
+    @Override
+    public CountsSnapshot snapshot()
+    {
+        return snapshot( txIdStore.getLastClosedTransactionId() );
+    }
+
     /**
      * This method is thread safe w.r.t updates to the countstore, but not for performing concurrent snapshots.
+     * //todo fix the weirdness with snapshot = null where it could be read by another thread.
+     * //todo fix the awaitForever condition where isHealthy() might not break us out of the wait.
      */
     @Override
     public CountsSnapshot snapshot( long txId )
@@ -207,8 +225,8 @@ public class InMemoryCountsStore implements CountsStore
         catch ( InterruptedException ex )
         {
             Thread.currentThread().interrupt();
-                throw Exceptions
-                        .withCause( new UnderlyingStorageException( "Construction of snapshot was interrupted." ), ex );
+            throw Exceptions
+                    .withCause( new UnderlyingStorageException( "Construction of snapshot was interrupted." ), ex );
         }
         finally
         {
@@ -220,6 +238,12 @@ public class InMemoryCountsStore implements CountsStore
     public void forEach( BiConsumer<CountsKey,long[]> action )
     {
         map.forEach( action );
+    }
+
+    @Override
+    public boolean seenTx( long txId )
+    {
+        return lastTxId.seen( txId, EMPTY_METADATA );
     }
 
     /**

@@ -148,7 +148,7 @@ public class InMemoryCountsStoreTest
         CountsSnapshot countsSnapshot = countStore.snapshot( 3 );
         long beforeTxId = countsSnapshot.getTxId();
         assertEquals( 4, beforeTxId );
-        countStore = new InMemoryCountsStore( countsSnapshot, new AlwaysHappyDatabaseHealth() );
+        countStore = new InMemoryCountsStore( countsSnapshot, null, new AlwaysHappyDatabaseHealth() );
 
         //THEN
         CountsSnapshot secondCountsSnapshot = countStore.snapshot( 3 );

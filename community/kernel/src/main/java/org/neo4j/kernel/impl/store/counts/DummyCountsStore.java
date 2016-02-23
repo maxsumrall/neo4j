@@ -35,7 +35,19 @@ public class DummyCountsStore implements CountsStore
     }
 
     @Override
+    public CountsSnapshot snapshot()
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void forEach( BiConsumer<CountsKey,long[]> action )
     {
+    }
+
+    @Override
+    public boolean seenTx( long txId )
+    {
+        return false;
     }
 }

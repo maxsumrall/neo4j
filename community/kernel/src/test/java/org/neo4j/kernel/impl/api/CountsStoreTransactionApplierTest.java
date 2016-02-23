@@ -24,7 +24,6 @@ import org.junit.Test;
 import org.neo4j.kernel.api.ReadOperations;
 import org.neo4j.kernel.impl.store.counts.CountsStorageService;
 import org.neo4j.kernel.impl.transaction.command.Command;
-import org.neo4j.storageengine.api.TransactionApplicationMode;
 
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -40,9 +39,8 @@ public class CountsStoreTransactionApplierTest
         // GIVEN
         CountsStorageService countsStorageService = mock( CountsStorageService.class );
         CountsAccessor.Updater updater = mock( CountsAccessor.Updater.class );
-        when( countsStorageService.apply( anyLong() ) ).thenReturn( updater );
-        CountsStoreBatchTransactionApplier applier = new CountsStoreBatchTransactionApplier( countsStorageService,
-                TransactionApplicationMode.INTERNAL );
+        when( countsStorageService.newTransactionalUpdater( anyLong() ) ).thenReturn( updater );
+        CountsStoreBatchTransactionApplier applier = new CountsStoreBatchTransactionApplier( countsStorageService );
 
         // WHEN
         try ( TransactionApplier txApplier = applier.startTx( new TransactionToApply( null, 2L ) ) )

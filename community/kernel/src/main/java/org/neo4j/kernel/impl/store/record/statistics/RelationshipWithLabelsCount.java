@@ -2,6 +2,7 @@ package org.neo4j.kernel.impl.store.record.statistics;
 
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
+import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyType;
 
 public class RelationshipWithLabelsCount extends StatisticsEntry
@@ -23,7 +24,7 @@ public class RelationshipWithLabelsCount extends StatisticsEntry
     @Override
     public Pair<CountsKey,long[]> asSnapshotEntry()
     {
-        return null;
+        return Pair.of( CountsKeyFactory.relationshipKey( startLabelId, typeId, endLabelId ), new long[]{count});
     }
 
     public int startLabelId()

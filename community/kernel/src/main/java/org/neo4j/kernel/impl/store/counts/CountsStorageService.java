@@ -19,9 +19,6 @@
  */
 package org.neo4j.kernel.impl.store.counts;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-
 import org.neo4j.kernel.impl.api.CountsAccessor;
 import org.neo4j.kernel.impl.api.CountsVisitor;
 import org.neo4j.kernel.impl.store.CountsComputer;
@@ -33,58 +30,49 @@ import org.neo4j.kernel.impl.store.counts.keys.IndexStatisticsKey;
 import org.neo4j.kernel.impl.store.counts.keys.NodeKey;
 import org.neo4j.kernel.impl.store.counts.keys.RelationshipKey;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
-import org.neo4j.kernel.internal.DatabaseHealth;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.register.Register;
 
 public class CountsStorageService implements CountsAccessor, CountsVisitor.Visitable, Lifecycle
 {
     private final CountsTracker countsTracker;
-    private CountsStore countsStore;
+    private final CountsStoreFactory countsStoreFactory;
     private final StatisticsStore statisticsStore;
-    private final TransactionIdStore txIdStore;
     private final CountsComputer countsComputer;
-    private final DatabaseHealth databaseHealth;
+    private final TransactionIdStore txIdStore;
 
-    private boolean needsRebuild;
+    private boolean countsStoreNeedsRebuild;
 
-    public CountsStorageService( NeoStores neoStores, DatabaseHealth databaseHealth )
+    public CountsStorageService( NeoStores neoStores, CountsStoreFactory countsStoreFactory )
     {
         this.countsTracker = neoStores.getCounts();
-        this.statisticsStore = neoStores.getStatisticsStore();
         this.txIdStore = neoStores.getMetaDataStore();
+        this.countsStoreFactory = countsStoreFactory;
+        this.statisticsStore = neoStores.getStatisticsStore();
         this.countsComputer = new CountsComputer( neoStores );
-        this.databaseHealth = databaseHealth;
     }
 
     @Override
     public void init() throws Throwable
     {
-        CountsSnapshot snapshot = statisticsStore.read();
-
-        if ( snapshot == null )
+        boolean initialized = statisticsStore.readInMemoryState( countsStoreFactory );
+        if ( !initialized )
         {
-            needsRebuild = true;
-            countsStore = new DummyCountsStore();
-        }
-        else
-        {
-            countsStore = new InMemoryCountsStore( snapshot, databaseHealth );
+            countsStoreNeedsRebuild = true;
         }
     }
 
     @Override
     public void start() throws Throwable
     {
-        if ( needsRebuild )
+        if ( countsStoreNeedsRebuild )
         {
-            long lastCommittedTransactionId = txIdStore.getLastCommittedTransactionId();
-            countsStore = new InMemoryCountsStore( lastCommittedTransactionId, databaseHealth );
-            try ( Updater updater = updaterFor( lastCommittedTransactionId ) )
+            statisticsStore.initializeInMemoryState( countsStoreFactory );
+            try ( Updater updater = newNonTransactionalUpdater() )
             {
                 countsComputer.initialize( updater );
             }
-            needsRebuild = false;
+            countsStoreNeedsRebuild = false;
         }
     }
 
@@ -98,50 +86,34 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     {
     }
 
-    public void force()
-    {
-        if ( needsRebuild )
-        {
-            return;
-        }
-        try
-        {
-            long lastCommittedTxId = txIdStore.getLastCommittedTransactionId();
-            CountsSnapshot snapshot = countsStore.snapshot( lastCommittedTxId );
-            statisticsStore.write( snapshot );
-        }
-        catch ( IOException e )
-        {
-            throw new UncheckedIOException( e );
-        }
-    }
-
-    public Updater updaterFor( long txId )
+    public Updater newTransactionalUpdater( long txId )
     {
         Updater countsTrackerUpdater = countsTracker.apply( txId ).orElse( null );
-        CountsStoreUpdater countsStoreUpdater = new CountsStoreUpdater( txId, countsStore );
+        CountsStore countsStore = statisticsStore.getCountsStore();
+        Updater countsUpdater = countsStore.seenTx( txId ) ? new NoOpUpdater()
+                                                           : new CountsStoreTransactionalUpdater( txId, countsStore );
         if ( countsTrackerUpdater == null )
         {
-            return countsStoreUpdater;
+            return countsUpdater;
         }
-        return new MultipleCountsUpdater( new Updater[]{countsTrackerUpdater, countsStoreUpdater} );
+        return new MultipleCountsUpdater( new Updater[]{countsTrackerUpdater, countsUpdater} );
     }
 
-    public Updater apply( long txId )
+    public Updater newNonTransactionalUpdater()
     {
-        return updaterFor( txId );
+        return new CountsStoreNonTransactionalUpdater( statisticsStore.getCountsStore() );
     }
 
     @Override
     public Register.DoubleLongRegister nodeCount( int labelId, Register.DoubleLongRegister target )
     {
         countsTracker.nodeCount( labelId, target );
-        long value = countsStore.get( CountsKeyFactory.nodeKey( labelId ) )[0];
+        long value = statisticsStore.getCountsStore().get( CountsKeyFactory.nodeKey( labelId ) )[0];
         if ( target.readSecond() != value )
         {
             throw new AssertionError(
                     "Values from countsTracker and countsStore do not match: " + target.readSecond() + " and " +
-                    value );
+                            value );
         }
         target.write( 0, value );
         return target;
@@ -152,12 +124,13 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
             Register.DoubleLongRegister target )
     {
         countsTracker.relationshipCount( startLabelId, typeId, endLabelId, target );
-        long value = countsStore.get( CountsKeyFactory.relationshipKey( startLabelId, typeId, endLabelId ) )[0];
+        long value = statisticsStore.getCountsStore()
+                .get( CountsKeyFactory.relationshipKey( startLabelId, typeId, endLabelId ) )[0];
         if ( target.readSecond() != value )
         {
             throw new AssertionError(
                     "Values from countsTracker and countsStore do not match: " + target.readSecond() + " and " +
-                    value );
+                            value );
         }
         target.write( 0, value );
         return target;
@@ -168,12 +141,13 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
             Register.DoubleLongRegister target )
     {
         countsTracker.indexUpdatesAndSize( labelId, propertyKeyId, target );
-        long[] values = countsStore.get( CountsKeyFactory.indexStatisticsKey( labelId, propertyKeyId ) );
+        long[] values =
+                statisticsStore.getCountsStore().get( CountsKeyFactory.indexStatisticsKey( labelId, propertyKeyId ) );
         if ( target.readFirst() != values[0] || target.readSecond() != values[1] )
         {
             throw new AssertionError(
                     "Values from countsTracker and countsStore do not match: " + target.readFirst() + " and " +
-                    values[0] + " and " + target.readSecond() + " and " + values[1] );
+                            values[0] + " and " + target.readSecond() + " and " + values[1] );
         }
         target.write( values[0], values[1] );
         return target;
@@ -183,12 +157,13 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     public Register.DoubleLongRegister indexSample( int labelId, int propertyKeyId, Register.DoubleLongRegister target )
     {
         countsTracker.indexSample( labelId, propertyKeyId, target );
-        long[] values = countsStore.get( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ) );
+        long[] values =
+                statisticsStore.getCountsStore().get( CountsKeyFactory.indexSampleKey( labelId, propertyKeyId ) );
         if ( target.readFirst() != values[0] || target.readSecond() != values[1] )
         {
             throw new AssertionError(
                     "Values from countsTracker and countsStore do not match: " + target.readFirst() + " and " +
-                    values[0] + " and " + target.readSecond() + " and " + values[1] );
+                            values[0] + " and " + target.readSecond() + " and " + values[1] );
         }
         target.write( values[0], values[1] );
         return target;
@@ -197,7 +172,7 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     @Override
     public void accept( CountsVisitor visitor )
     {
-        countsStore.forEach( ( countsKey, values ) -> {
+        statisticsStore.getCountsStore().forEach( ( countsKey, values ) -> {
             switch ( countsKey.recordType() )
             {
             case ENTITY_NODE:

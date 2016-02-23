@@ -5,11 +5,16 @@ import java.io.IOException;
 import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.store.counts.CountsSnapshot;
+import org.neo4j.kernel.impl.store.counts.CountsStore;
+import org.neo4j.kernel.impl.store.counts.CountsStoreFactory;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
 import org.neo4j.kernel.impl.store.format.RecordFormat;
@@ -20,9 +25,12 @@ import org.neo4j.kernel.impl.store.record.statistics.NodeWithLabelCount;
 import org.neo4j.kernel.impl.store.record.statistics.StatisticsRecord;
 import org.neo4j.logging.LogProvider;
 
+// todo: write some sort of trailer to avoid reading zeroes after crash
 public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoStoreHeader>
 {
     public static final String TYPE_DESCRIPTOR = "StatisticsStore";
+
+    private CountsStore countsStore;
 
     // todo: special key is required for this
     private static final CountsKey LAST_APPLIED_TX_KEY = CountsKeyFactory.nodeKey( -42 );
@@ -38,9 +46,33 @@ public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoSt
     @Override
     public void flush()
     {
+        Objects.requireNonNull( countsStore );
+        CountsSnapshot snapshot = countsStore.snapshot();
+        try
+        {
+            write( snapshot );
+        }
+        catch ( IOException e )
+        {
+            throw new UnderlyingStorageException( e );
+        }
+
+        super.flush();
     }
 
-    public CountsSnapshot read() throws IOException
+    public boolean readInMemoryState( CountsStoreFactory countsStoreFactory ) throws IOException
+    {
+        CountsSnapshot snapshot = readSnapshot();
+        if ( snapshot != null )
+        {
+            countsStore = countsStoreFactory.create( snapshot );
+        }
+        return countsStore != null;
+    }
+
+    // todo: handle all exceptions here and return null if any
+    @Nullable
+    public CountsSnapshot readSnapshot() throws IOException
     {
         if ( !isInUse( 0 ) )
         {
@@ -63,7 +95,18 @@ public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoSt
         return new CountsSnapshot( txId, map );
     }
 
-    public void write( CountsSnapshot snapshot ) throws IOException
+    public void initializeInMemoryState( CountsStoreFactory countsStoreFactory )
+    {
+        countsStore = countsStoreFactory.create();
+    }
+
+    @Nonnull
+    public CountsStore getCountsStore()
+    {
+        return Objects.requireNonNull( countsStore );
+    }
+
+    private void write( CountsSnapshot snapshot ) throws IOException
     {
         clearStoreFiles();
 
@@ -76,7 +119,6 @@ public class StatisticsStore extends ComposableRecordStore<StatisticsRecord,NoSt
             StatisticsRecord record = newRecordForWrite( nextId(), entry.getKey(), entry.getValue() );
             updateRecord( record );
         }
-        storeFile.flushAndForce();
     }
 
     private void clearStoreFiles()

@@ -7,14 +7,14 @@ import org.neo4j.kernel.impl.api.CountsAccessor;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
 
-public class CountsStoreUpdater implements CountsAccessor.Updater
+public class CountsStoreTransactionalUpdater implements CountsAccessor.Updater
 {
     private final long txId;
     private final CountsStore countsStore;
 
     private final Map<CountsKey,long[]> updates = new HashMap<>();
 
-    public CountsStoreUpdater( long txId, CountsStore countsStore )
+    public CountsStoreTransactionalUpdater( long txId, CountsStore countsStore )
     {
         this.txId = txId;
         this.countsStore = countsStore;

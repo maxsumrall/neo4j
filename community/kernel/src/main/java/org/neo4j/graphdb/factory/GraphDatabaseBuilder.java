@@ -185,7 +185,7 @@ public class GraphDatabaseBuilder
         return creator.newDatabase( config );
     }
 
-    /**
+    /**e
      * Used by tests via GraphDatabaseBuilderTestTools.
      */
     Map<String, String> getRawConfig()
