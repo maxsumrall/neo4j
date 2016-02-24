@@ -28,12 +28,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
+import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 
 import static org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory.nodeKey;
 
+// todo: revisit how txIds are handled
 public class IntermediateStateTestManager
 {
-    private volatile int id = 1;
+    private volatile long id = TransactionIdStore.BASE_TX_ID;
     private List<ConcurrentHashMap<CountsKey,long[]>> intermediateStateMaps = new ArrayList<>();
     private Iterator<ConcurrentHashMap<CountsKey,long[]>> maps;
 
@@ -89,16 +91,16 @@ public class IntermediateStateTestManager
 
     public synchronized ConcurrentHashMap<CountsKey,long[]> getIntermediateMap( int txId )
     {
-        return intermediateStateMaps.get( txId );
+        return intermediateStateMaps.get( txId - 1 );
     }
 
-    public synchronized int getNextUpdateMap( Map<CountsKey,long[]> map )
+    public synchronized long getNextUpdateMap( Map<CountsKey,long[]> map )
     {
         if ( maps.hasNext() )
         {
             map.clear();
             map.putAll( maps.next() );
-            return id++;
+            return ++id;
         }
         else
         {
@@ -106,7 +108,7 @@ public class IntermediateStateTestManager
         }
     }
 
-    public int getId()
+    public long getId()
     {
         return id;
     }

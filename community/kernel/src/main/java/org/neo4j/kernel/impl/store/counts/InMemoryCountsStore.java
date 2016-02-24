@@ -39,8 +39,8 @@ import static org.neo4j.function.Predicates.awaitForever;
 
 public class InMemoryCountsStore implements CountsStore
 {
-    private static final long[] EMPTY_METADATA = {1L};
-    private static final long[] EMPTY_VALUE = {0, 0};
+    static final long[] EMPTY_METADATA = {1L};
+    static final long[] EMPTY_VALUE = {0, 0};
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     //TODO Always return long, not long[]. This requires splitting index keys into 4 keys, one for each value.
@@ -64,15 +64,6 @@ public class InMemoryCountsStore implements CountsStore
         this.databaseHealth = databaseHealth;
         map = new ConcurrentHashMap<>( snapshot.getMap() );
         lastTxId.set( snapshot.getTxId(), EMPTY_METADATA );
-    }
-
-    //todo probably remove
-    public InMemoryCountsStore( long txId, DatabaseHealth databaseHealth )
-    {
-        txIdStore = null;
-        this.databaseHealth = databaseHealth;
-        map = new ConcurrentHashMap<>();
-        lastTxId.set( txId, EMPTY_METADATA );
     }
 
     @Override

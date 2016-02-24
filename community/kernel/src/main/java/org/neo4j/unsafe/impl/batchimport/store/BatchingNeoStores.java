@@ -48,9 +48,12 @@ import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
 import org.neo4j.kernel.impl.store.UnderlyingStorageException;
+import org.neo4j.kernel.impl.store.counts.CountsStorageService;
+import org.neo4j.kernel.impl.store.counts.CountsStoreFactory;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
 import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.util.Dependencies;
+import org.neo4j.kernel.internal.AlwaysHappyDatabaseHealth;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLogProvider;
@@ -63,7 +66,6 @@ import org.neo4j.unsafe.impl.batchimport.store.BatchingTokenRepository.BatchingR
 import org.neo4j.unsafe.impl.batchimport.store.io.IoTracer;
 
 import static java.lang.String.valueOf;
-
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.dense_node_threshold;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.pagecache_memory;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
@@ -85,6 +87,7 @@ public class BatchingNeoStores implements AutoCloseable
     private final NeoStores neoStores;
     private final LifeSupport life = new LifeSupport();
     private final LabelScanStore labelScanStore;
+    private final CountsStorageService countsStorageService;
     private final IoTracer ioTracer;
 
     public BatchingNeoStores( FileSystemAbstraction fileSystem, File storeDir, Configuration config,
@@ -146,6 +149,8 @@ public class BatchingNeoStores implements AutoCloseable
         life.start();
         labelScanStore = life.add( extensions.resolveDependency( LabelScanStoreProvider.class,
                 HighestSelectionStrategy.getInstance() ).getLabelScanStore() );
+        countsStorageService = life.add( new CountsStorageService( neoStores,
+                new CountsStoreFactory( neoStores.getMetaDataStore(), new AlwaysHappyDatabaseHealth() ) ) );
     }
 
     private static PageCache createPageCache( FileSystemAbstraction fileSystem, Config config, LogProvider log,
@@ -262,5 +267,10 @@ public class BatchingNeoStores implements AutoCloseable
     public LabelScanStore getLabelScanStore()
     {
         return labelScanStore;
+    }
+
+    public CountsStorageService getCountsStorageService()
+    {
+        return countsStorageService;
     }
 }

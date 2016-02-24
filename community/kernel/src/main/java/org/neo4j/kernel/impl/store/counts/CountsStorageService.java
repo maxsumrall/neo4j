@@ -38,18 +38,18 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     private final CountsTracker countsTracker;
     private final CountsStoreFactory countsStoreFactory;
     private final StatisticsStore statisticsStore;
-    private final CountsComputer countsComputer;
     private final TransactionIdStore txIdStore;
+    private final NeoStores neoStores;
 
     private boolean countsStoreNeedsRebuild;
 
     public CountsStorageService( NeoStores neoStores, CountsStoreFactory countsStoreFactory )
     {
+        this.neoStores = neoStores;
         this.countsTracker = neoStores.getCounts();
         this.txIdStore = neoStores.getMetaDataStore();
         this.countsStoreFactory = countsStoreFactory;
         this.statisticsStore = neoStores.getStatisticsStore();
-        this.countsComputer = new CountsComputer( neoStores );
     }
 
     @Override
@@ -65,6 +65,7 @@ public class CountsStorageService implements CountsAccessor, CountsVisitor.Visit
     @Override
     public void start() throws Throwable
     {
+        CountsComputer countsComputer = new CountsComputer( neoStores );
         if ( countsStoreNeedsRebuild )
         {
             statisticsStore.initializeInMemoryState( countsStoreFactory );

@@ -48,6 +48,8 @@ import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
+import org.neo4j.kernel.impl.store.counts.CountsStorageService;
+import org.neo4j.kernel.impl.store.counts.CountsStoreFactory;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
 import org.neo4j.kernel.impl.store.format.lowlimit.LowLimit;
 import org.neo4j.kernel.impl.store.format.lowlimit.NodeRecordFormat;
@@ -72,7 +74,7 @@ import org.neo4j.kernel.impl.storemigration.monitoring.MigrationProgressMonitor;
 import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.PhysicalLogFiles;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
-import org.neo4j.kernel.internal.DatabaseHealth;
+import org.neo4j.kernel.internal.AlwaysHappyDatabaseHealth;
 import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.unsafe.impl.batchimport.AdditionalInitialIds;
@@ -150,6 +152,9 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
         // Write the tx checksum to file in migrationDir, because we need it later when moving files into storeDir
         writeLastTxChecksum( migrationDir, lastTxChecksum );
         writeLastTxLogPosition( migrationDir, lastTxLogPosition );
+
+        // todo: is it ok to just create file here?
+        fileSystem.create( new File( storeDir, MetaDataStore.DEFAULT_NAME + StoreFactory.STATISTICS_STORE ) ).close();
 
         switch ( versionToMigrateFrom )
         {
@@ -329,6 +334,8 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
                 life.add( new CountsTracker(
                         logService.getInternalLogProvider(), fileSystem, pageCache, config, storeFileBase )
                         .setInitializer( initializer ) );
+                life.add( new CountsStorageService( neoStores,
+                        new CountsStoreFactory( neoStores.getMetaDataStore(), new AlwaysHappyDatabaseHealth() ) ) );
             }
         }
     }
@@ -682,11 +689,9 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
         switch ( versionToMigrateFrom )
         {
         case Legacy20Store.LEGACY_VERSION:
-        case Legacy23Store.LEGACY_VERSION:
-            // nothing to do
-            break;
         case Legacy21Store.LEGACY_VERSION:
         case Legacy22Store.LEGACY_VERSION:
+        case Legacy23Store.LEGACY_VERSION:
             // create counters from scratch
             Iterable<StoreFile> countsStoreFiles =
                     Iterables.iterable( StoreFile.COUNTS_STORE_LEFT, StoreFile.COUNTS_STORE_RIGHT );

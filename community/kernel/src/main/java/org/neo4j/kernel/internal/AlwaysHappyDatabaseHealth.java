@@ -17,20 +17,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.neo4j.kernel.impl.store.counts;
-
-import org.neo4j.kernel.impl.core.DatabasePanicEventGenerator;
-import org.neo4j.kernel.internal.DatabaseHealth;
-import org.neo4j.logging.Log;
+package org.neo4j.kernel.internal;
 
 public class AlwaysHappyDatabaseHealth extends DatabaseHealth
 {
-
-    public AlwaysHappyDatabaseHealth( DatabasePanicEventGenerator dbpe, Log log )
-    {
-        super( dbpe, log );
-    }
-
     public AlwaysHappyDatabaseHealth()
     {
         super( null, null );

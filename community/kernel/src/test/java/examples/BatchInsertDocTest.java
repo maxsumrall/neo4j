@@ -19,6 +19,10 @@
  */
 package examples;
 
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -27,10 +31,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
 
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -51,6 +51,18 @@ import static org.junit.Assert.assertThat;
 
 public class BatchInsertDocTest
 {
+    @Rule
+    public DefaultFileSystemRule fileSystemRule = new DefaultFileSystemRule();
+    private DefaultFileSystemAbstraction fileSystem;
+
+    @Before
+    public void before() throws Exception
+    {
+        fileSystem = fileSystemRule.get();
+        fileSystem.mkdirs( new File( "target" ) );
+        fileSystem.mkdirs( new File( "target/docs" ) );
+    }
+
     @Test
     public void insert() throws Exception
     {
@@ -116,11 +128,13 @@ public class BatchInsertDocTest
     @Test
     public void insertWithConfig() throws IOException
     {
+        String directory = "target/batchinserter-example-config";
+        cleanImportDirectory( directory );
+
         // START SNIPPET: configuredInsert
         Map<String, String> config = new HashMap<>();
         config.put( "dbms.pagecache.memory", "512m" );
-        BatchInserter inserter = BatchInserters.inserter(
-                new File( "target/batchinserter-example-config" ).getAbsolutePath(), config );
+        BatchInserter inserter = BatchInserters.inserter( new File( directory ).getAbsolutePath(), fileSystem, config );
         // Insert data here ... and then shut down:
         inserter.shutdown();
         // END SNIPPET: configuredInsert
@@ -129,6 +143,9 @@ public class BatchInsertDocTest
     @Test
     public void insertWithConfigFile() throws IOException
     {
+        String directory = "target/docs/batchinserter-example-config";
+        cleanImportDirectory( directory );
+
         try ( Writer fw = fileSystem.openAsWriter( new File( "target/docs/batchinsert-config" ).getAbsoluteFile(),
                 StandardCharsets.UTF_8, false ) )
         {
@@ -140,22 +157,17 @@ public class BatchInsertDocTest
         {
             Map<String, String> config = MapUtil.load( input );
             BatchInserter inserter = BatchInserters.inserter(
-                    "target/docs/batchinserter-example-config", config );
+                    directory, config );
             // Insert data here ... and then shut down:
             inserter.shutdown();
         }
         // END SNIPPET: configFileInsert
     }
 
-    @Rule
-    public DefaultFileSystemRule fileSystemRule = new DefaultFileSystemRule();
-    private DefaultFileSystemAbstraction fileSystem;
-
-    @Before
-    public void before() throws Exception
+    private void cleanImportDirectory( String directory ) throws IOException
     {
-        fileSystem = fileSystemRule.get();
-        fileSystem.mkdirs( new File( "target" ) );
-        fileSystem.mkdirs( new File( "target/docs" ) );
+        // Make sure our scratch directory is clean
+        File tempStoreDir = new File( directory ).getAbsoluteFile();
+        FileUtils.deleteRecursively( tempStoreDir );
     }
 }

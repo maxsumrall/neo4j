@@ -35,18 +35,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
+import org.neo4j.kernel.internal.AlwaysHappyDatabaseHealth;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Writes updates to the count store and ensures that snapshots are correct. Correctness is tested
  * by generating ALL intermediate map states and comparing the snapshot to the corresponding
  * expected state.
  */
+// todo: revisit sout in this test
 public class InMemoryCountsStoreIntegrationTest
 {
     @Test
@@ -146,7 +150,7 @@ public class InMemoryCountsStoreIntegrationTest
             while ( !stop.get() )
             {
                 Map<CountsKey,long[]> map = new HashMap<>();
-                int txId = manager.getNextUpdateMap( map );
+                long txId = manager.getNextUpdateMap( map );
                 //Lets mix up the order the updates are applied.
                 if ( ThreadLocalRandom.current().nextInt( 0, 5 ) == 3 ) // 3/5 = 60% of the time. Just a guess.
                 {
@@ -178,7 +182,7 @@ public class InMemoryCountsStoreIntegrationTest
         {
             for ( int i = 0; i < repeatTimes; i++ )
             {
-                int id = intermediateStateTestManager.getId();
+                long id = intermediateStateTestManager.getId();
                 long txId = id + ThreadLocalRandom.current().nextLong( 0, 5 );
                 CountsSnapshot countsSnapshot = countStore.snapshot( txId );
                 long snapshotTxId = countsSnapshot.getTxId();
@@ -239,6 +243,8 @@ public class InMemoryCountsStoreIntegrationTest
 
     private InMemoryCountsStore getCountsStore()
     {
-        return new InMemoryCountsStore( TransactionIdStore.BASE_TX_ID, new AlwaysHappyDatabaseHealth() );
+        TransactionIdStore txIdStore = mock(TransactionIdStore.class);
+        when(txIdStore.getLastCommittedTransactionId()).thenReturn(TransactionIdStore.BASE_TX_ID);
+        return new InMemoryCountsStore( txIdStore, new AlwaysHappyDatabaseHealth() );
     }
 }

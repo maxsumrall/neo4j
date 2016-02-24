@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.impl.store.counts;
 
-import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -33,10 +32,15 @@ import org.neo4j.kernel.impl.store.counts.keys.IndexStatisticsKey;
 import org.neo4j.kernel.impl.store.counts.keys.NodeKey;
 import org.neo4j.kernel.impl.store.counts.keys.RelationshipKey;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
+import org.neo4j.kernel.internal.AlwaysHappyDatabaseHealth;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+// todo: revisit txIds used in this test
 public class InMemoryCountsStoreTest
 {
     @Test
@@ -49,14 +53,14 @@ public class InMemoryCountsStoreTest
         update.put( key, new long[]{1} );
 
         //WHEN
-        countStore.updateAll( 1, update );
+        countStore.updateAll( 2, update );
 
         //THEN
         assertEquals( countStore.get( key )[0], 1 );
     }
 
     @Test
-    public void neverSetKeyReturnsNull()
+    public void neverSetKeyReturnsZeros()
     {
         //GIVEN
         InMemoryCountsStore countStore = createCountStore();
@@ -65,10 +69,10 @@ public class InMemoryCountsStoreTest
         update.put( key, new long[]{1} );
 
         //WHEN
-        countStore.updateAll( 1, update );
+        countStore.updateAll( 2, update );
 
         //THEN
-        Assert.assertNull( countStore.get( CountsKeyFactory.relationshipKey( 1, 1, 1 ) ) );
+        assertArrayEquals( countStore.get( CountsKeyFactory.relationshipKey( 1, 1, 1 ) ), InMemoryCountsStore.EMPTY_VALUE );
     }
 
     @Test( expected = NullPointerException.class )
@@ -81,7 +85,7 @@ public class InMemoryCountsStoreTest
         update.put( key, new long[]{1} );
 
         //WHEN
-        countStore.updateAll( 1, update );
+        countStore.updateAll( 2, update );
 
         //THEN throws
         countStore.get( null );
@@ -96,11 +100,11 @@ public class InMemoryCountsStoreTest
         Map<CountsKey,long[]> update = new HashMap<>();
 
         //WHEN
-        countStore.updateAll( 1, update );
+        countStore.updateAll( 2, update );
 
         //THEN
-        CountsSnapshot countsSnapshot = countStore.snapshot( 1 );
-        assertEquals( countsSnapshot.getTxId(), 1 );
+        CountsSnapshot countsSnapshot = countStore.snapshot( 2 );
+        assertEquals( countsSnapshot.getTxId(), 2 );
         assertEquals( countsSnapshot.getMap().size(), 0 );
     }
 
@@ -114,11 +118,11 @@ public class InMemoryCountsStoreTest
         update.put( key, new long[]{1} );
 
         //WHEN
-        countStore.updateAll( 1, update );
+        countStore.updateAll( 2, update );
 
         //THEN
         CountsSnapshot countsSnapshot = countStore.snapshot( 1 );
-        assertEquals( countsSnapshot.getTxId(), 1 );
+        assertEquals( countsSnapshot.getTxId(), 2 );
         assertEquals( countsSnapshot.getMap().size(), 1 );
         assertEquals( countsSnapshot.getMap().get( key )[0], 1 );
     }
@@ -134,15 +138,15 @@ public class InMemoryCountsStoreTest
         NodeKey keyC = CountsKeyFactory.nodeKey( 3 );
 
         update.put( keyA, new long[]{1} );
-        countStore.updateAll( 1, update );
-        update.clear();
-
-        update.put( keyB, new long[]{1} );
         countStore.updateAll( 2, update );
         update.clear();
 
-        update.put( keyC, new long[]{1} );
+        update.put( keyB, new long[]{1} );
         countStore.updateAll( 3, update );
+        update.clear();
+
+        update.put( keyC, new long[]{1} );
+        countStore.updateAll( 4, update );
 
         //WHEN
         CountsSnapshot countsSnapshot = countStore.snapshot( 3 );
@@ -152,11 +156,11 @@ public class InMemoryCountsStoreTest
 
         //THEN
         CountsSnapshot secondCountsSnapshot = countStore.snapshot( 3 );
-        assertEquals( 3, secondCountsSnapshot.getTxId() );
+        assertEquals( 4, secondCountsSnapshot.getTxId() );
         update.put( keyC, new long[]{1} );
-        countStore.updateAll( 4, update );
+        countStore.updateAll( 5, update );
         CountsSnapshot thirdCountsSnapshot = countStore.snapshot( 4 );
-        assertEquals( 4, thirdCountsSnapshot.getTxId() );
+        assertEquals( 5, thirdCountsSnapshot.getTxId() );
     }
 
     @Test
@@ -166,7 +170,7 @@ public class InMemoryCountsStoreTest
         Map<CountsKey,long[]> update = new HashMap<>();
         NodeKey nodeKey = CountsKeyFactory.nodeKey( 1 );
         update.put( nodeKey, new long[]{1} );
-        countStore.updateAll( 1, update );
+        countStore.updateAll( 2, update );
 
         countStore.forEach( new BiConsumer<CountsKey,long[]>()
         {
@@ -300,7 +304,7 @@ public class InMemoryCountsStoreTest
         IndexStatisticsKey indexStatisticsKey = CountsKeyFactory.indexStatisticsKey( 1, 1 );
 
         //WHEN
-        countStore.updateAll( 1, new HashMap<CountsKey,long[]>()
+        countStore.updateAll( 2, new HashMap<CountsKey,long[]>()
         {{
             put( nodeKey, new long[]{42} );
             put( relKey, new long[]{89} );
@@ -334,7 +338,7 @@ public class InMemoryCountsStoreTest
         IndexStatisticsKey indexStatisticsKey = CountsKeyFactory.indexStatisticsKey( 1, 1 );
 
         //WHEN
-        countStore.updateAll( 1, new HashMap<CountsKey,long[]>()
+        countStore.updateAll( 2, new HashMap<CountsKey,long[]>()
         {{
             put( nodeKey, new long[]{42} );
             put( relKey, new long[]{89} );
@@ -359,6 +363,8 @@ public class InMemoryCountsStoreTest
 
     private InMemoryCountsStore createCountStore()
     {
-        return new InMemoryCountsStore( TransactionIdStore.BASE_TX_ID, new AlwaysHappyDatabaseHealth() );
+        TransactionIdStore txIdStore = mock(TransactionIdStore.class);
+        when(txIdStore.getLastCommittedTransactionId()).thenReturn(TransactionIdStore.BASE_TX_ID);
+        return new InMemoryCountsStore( txIdStore, new AlwaysHappyDatabaseHealth() );
     }
 }
