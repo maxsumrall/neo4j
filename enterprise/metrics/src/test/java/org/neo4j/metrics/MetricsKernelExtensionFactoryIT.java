@@ -36,7 +36,6 @@ import org.neo4j.kernel.ha.HighlyAvailableGraphDatabase;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointer;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.SimpleTriggerInfo;
-import org.neo4j.metrics.source.cluster.ClusterMetrics;
 import org.neo4j.metrics.source.db.CheckPointingMetrics;
 import org.neo4j.metrics.source.db.CypherMetrics;
 import org.neo4j.metrics.source.db.EntityCountMetrics;
@@ -44,14 +43,11 @@ import org.neo4j.metrics.source.db.TransactionMetrics;
 import org.neo4j.metrics.source.jvm.ThreadMetrics;
 import org.neo4j.test.ha.ClusterRule;
 
-import static org.hamcrest.CoreMatchers.equalTo;
+import static java.lang.System.currentTimeMillis;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.junit.Assert.assertThat;
-
-import static java.lang.System.currentTimeMillis;
-
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.check_point_interval_time;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.cypher_min_replan_interval;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
@@ -124,23 +120,6 @@ public class MetricsKernelExtensionFactoryIT
 
         // THEN
         assertThat( committedTransactions, lessThanOrEqualTo( 1001L ) );
-    }
-
-    @Test
-    public void shouldShowClusterMetricsWhenMetricsEnabled() throws Throwable
-    {
-        // GIVEN
-        // Create some activity that will show up in the metrics data.
-        addNodes( 1000 );
-        File metricsFile = metricsCsv( outputPath, ClusterMetrics.IS_MASTER );
-
-        // WHEN
-        // We should at least have a "timestamp" column, and a "neo4j.transaction.committed" column
-        long committedTransactions = readLongValueAndAssert( metricsFile,
-                ( newValue, currentValue ) -> newValue >= currentValue );
-
-        // THEN
-        assertThat( committedTransactions, equalTo( 1L ) );
     }
 
     @Test

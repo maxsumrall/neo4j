@@ -39,7 +39,6 @@ import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.metrics.MetricsSettings;
 import org.neo4j.metrics.output.EventReporter;
-import org.neo4j.metrics.source.cluster.ClusterMetrics;
 import org.neo4j.metrics.source.cluster.NetworkMetrics;
 import org.neo4j.metrics.source.coreedge.CoreMetrics;
 import org.neo4j.metrics.source.coreedge.EdgeMetrics;
@@ -139,20 +138,6 @@ public class Neo4jMetricsBuilder
         {
             life.add( new NetworkMetrics( registry, dependencies.monitors() ) );
             result = true;
-        }
-
-        if ( config.get( MetricsSettings.neoClusterEnabled ) )
-        {
-            if ( kernelContext.databaseInfo().operationalMode == OperationalMode.ha )
-            {
-                life.add( new ClusterMetrics( dependencies.monitors(), registry, dependencies.clusterMembers() ) );
-                result = true;
-            }
-            else
-            {
-                logService.getUserLog( getClass() )
-                        .warn( "Cluster metrics was enabled but the graph database is not in HA mode." );
-            }
         }
 
         if ( config.get( MetricsSettings.cypherPlanningEnabled ) )
