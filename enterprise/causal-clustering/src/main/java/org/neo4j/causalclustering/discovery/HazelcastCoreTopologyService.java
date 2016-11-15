@@ -25,16 +25,14 @@ import com.hazelcast.config.MemberAttributeConfig;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.HazelcastException;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.MemberAttributeEvent;
 import com.hazelcast.core.MembershipEvent;
 import com.hazelcast.core.MembershipListener;
 import com.hazelcast.instance.GroupProperties;
-import com.hazelcast.instance.GroupProperty;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 
 import org.neo4j.causalclustering.core.CausalClusteringSettings;
 import org.neo4j.causalclustering.identity.ClusterId;
@@ -48,6 +46,14 @@ import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 
+import static com.hazelcast.spi.properties.GroupProperty.INITIAL_MIN_CLUSTER_SIZE;
+import static com.hazelcast.spi.properties.GroupProperty.LOGGING_TYPE;
+import static com.hazelcast.spi.properties.GroupProperty.MAX_JOIN_MERGE_TARGET_SECONDS;
+import static com.hazelcast.spi.properties.GroupProperty.MAX_JOIN_SECONDS;
+import static com.hazelcast.spi.properties.GroupProperty.OPERATION_CALL_TIMEOUT_MILLIS;
+import static com.hazelcast.spi.properties.GroupProperty.WAIT_SECONDS_BEFORE_JOIN;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.neo4j.causalclustering.core.CausalClusteringSettings.discovery_listen_address;
 import static org.neo4j.kernel.impl.util.JobScheduler.SchedulingStrategy.POOLED;
 
 class HazelcastCoreTopologyService extends LifecycleAdapter implements CoreTopologyService
@@ -93,7 +99,7 @@ class HazelcastCoreTopologyService extends LifecycleAdapter implements CoreTopol
     @Override
     public void start()
     {
-        hazelcastInstance = createHazelcastInstance();
+        hazelcastInstance = createHazelcastInstanceWithRetries();
         log.info( "Cluster discovery service started" );
         membershipRegistrationId = hazelcastInstance.getCluster().addMembershipListener( new OurMembershipListener() );
         refreshCoreTopology();
@@ -115,14 +121,14 @@ class HazelcastCoreTopologyService extends LifecycleAdapter implements CoreTopol
         {
             refreshCoreTopology();
             refreshReadReplicaTopology();
-        }, config.get( CausalClusteringSettings.cluster_topology_refresh ), TimeUnit.MILLISECONDS );
+        }, config.get( CausalClusteringSettings.cluster_topology_refresh ), MILLISECONDS );
     }
 
     @Override
     public void stop()
     {
         log.info( String.format( "HazelcastCoreTopologyService stopping and unbinding from %s",
-                config.get( CausalClusteringSettings.discovery_listen_address ) ) );
+                config.get( discovery_listen_address ) ) );
         try
         {
             hazelcastInstance.getCluster().removeMembershipListener( membershipRegistrationId );
@@ -138,12 +144,82 @@ class HazelcastCoreTopologyService extends LifecycleAdapter implements CoreTopol
         }
     }
 
+    private HazelcastInstance createHazelcastInstanceWithRetries()
+    {
+        CompletableFuture<HazelcastInstance> hazelcastInstanceFuture = new CompletableFuture<>();
+
+        HazelcastCreator hazelcastCreator = new HazelcastCreator( 5, hazelcastInstanceFuture );
+
+        JobScheduler.JobHandle jobHandle = scheduler
+                .schedule( new JobScheduler.Group( getClass().toString(), POOLED ), hazelcastCreator, 100,
+                        MILLISECONDS );
+        hazelcastInstanceFuture.whenComplete( ( result, e ) -> jobHandle.cancel( true ) );
+
+        try
+        {
+            return hazelcastInstanceFuture.get();
+        }
+        catch ( Exception e )
+        {
+            String errorMessage = String.format( "Hazelcast was unable to start with setting: %s = %s",
+                    discovery_listen_address.name(), config.get( discovery_listen_address ) );
+            userLog.error( errorMessage );
+            log.error( errorMessage, e );
+            throw new RuntimeException( e );
+        }
+    }
+
+    private class HazelcastCreator implements Runnable
+    {
+        private final int retries;
+        private final CompletableFuture<HazelcastInstance> hazelcastInstanceFuture;
+
+        public HazelcastCreator( int retries, CompletableFuture<HazelcastInstance> hazelcastInstanceFuture )
+        {
+            this.retries = retries;
+            this.hazelcastInstanceFuture = hazelcastInstanceFuture;
+        }
+
+        @Override
+        public void run()
+        {
+            try
+            {
+                Hazelcast.shutdownAll(); //Make sure we start with a clean slate.
+            }
+            catch ( Exception e )
+            {
+                //meh
+            }
+
+            try
+            {
+                HazelcastInstance hazelcastInstance = createHazelcastInstance();
+                hazelcastInstanceFuture.complete( hazelcastInstance );
+            }
+            catch ( Exception e )
+            {
+                if ( retries > 0 )
+                {
+                    scheduler.schedule( new JobScheduler.Group( getClass().toString(), POOLED ),
+                            new HazelcastCreator( retries - 1, hazelcastInstanceFuture ), 100, MILLISECONDS );
+                }
+                else
+                {
+                    hazelcastInstanceFuture.completeExceptionally(
+                            new Throwable( "Failed to create a working " + "Hazelcast instance." ) );
+                }
+            }
+        }
+    }
+
     private HazelcastInstance createHazelcastInstance()
     {
         System.setProperty( GroupProperties.PROP_WAIT_SECONDS_BEFORE_JOIN, "1" );
 
         JoinConfig joinConfig = new JoinConfig();
         joinConfig.getMulticastConfig().setEnabled( false );
+        joinConfig.getAwsConfig().setEnabled( false );
         TcpIpConfig tcpIpConfig = joinConfig.getTcpIpConfig();
         tcpIpConfig.setEnabled( true );
 
@@ -163,11 +239,15 @@ class HazelcastCoreTopologyService extends LifecycleAdapter implements CoreTopol
         networkConfig.setPort( hazelcastAddress.getPort() );
         networkConfig.setJoin( joinConfig );
         networkConfig.setPortAutoIncrement( false );
+        networkConfig.setReuseAddress( true );
         com.hazelcast.config.Config c = new com.hazelcast.config.Config();
-        c.setProperty( GroupProperty.OPERATION_CALL_TIMEOUT_MILLIS, "10000" );
-        c.setProperty( GroupProperties.PROP_INITIAL_MIN_CLUSTER_SIZE,
+        c.setProperty( OPERATION_CALL_TIMEOUT_MILLIS.getName(), String.valueOf( 10_000 ) );
+        c.setProperty( INITIAL_MIN_CLUSTER_SIZE.getName(),
                 String.valueOf( minimumClusterSizeThatCanTolerateOneFaultForExpectedClusterSize() ) );
-        c.setProperty( GroupProperties.PROP_LOGGING_TYPE, "none" );
+        c.setProperty( LOGGING_TYPE.getName(), "none" );
+        c.setProperty( MAX_JOIN_SECONDS.getName(), "60" );
+        c.setProperty( MAX_JOIN_MERGE_TARGET_SECONDS.getName(), "5" );
+        c.setProperty( WAIT_SECONDS_BEFORE_JOIN.getName(), "1" );
 
         c.setNetworkConfig( networkConfig );
 
@@ -175,25 +255,13 @@ class HazelcastCoreTopologyService extends LifecycleAdapter implements CoreTopol
 
         c.setMemberAttributeConfig( memberAttributeConfig );
         userLog.info( "Waiting for other members to join cluster before continuing..." );
-        try
-        {
-            hazelcastInstance = Hazelcast.newHazelcastInstance( c );
-        }
-        catch ( HazelcastException e )
-        {
-            String errorMessage = String.format( "Hazelcast was unable to start with setting: %s = %s",
-                    discovery_listen_address.name(), config.get( discovery_listen_address ) );
-            userLog.error( errorMessage );
-            log.error( errorMessage, e );
-            throw new RuntimeException( e );
-        }
 
-        return hazelcastInstance;
+        return Hazelcast.newHazelcastInstance( c );
     }
 
     private Integer minimumClusterSizeThatCanTolerateOneFaultForExpectedClusterSize()
     {
-        return config.get( CausalClusteringSettings.expected_core_cluster_size ) / 2 + 1;
+        return (config.get( CausalClusteringSettings.expected_core_cluster_size ) / 2) + 1;
     }
 
     @Override
